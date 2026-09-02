@@ -95,7 +95,7 @@ export function SeekerSidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-border min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 shrink-0">
+    <aside className="w-64 bg-white flex flex-col justify-between p-4 shrink-0 min-h-full">
       <div className="space-y-6">
         {/* Dynamic User Profile Preview Snippet */}
         <div className="bg-mint-50/60 p-3.5 rounded-2xl border border-mint-100 flex items-center gap-3">

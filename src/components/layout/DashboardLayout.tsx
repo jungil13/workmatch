@@ -447,7 +447,7 @@ export function DashboardLayout({
       {/* Main Body with Sidebar */}
       <div className="flex-1 flex">
         {/* Desktop Sidebar */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto overflow-x-hidden border-r border-border scrollbar-hide">
           {portal === 'seeker' && <SeekerSidebar />}
           {portal === 'employer' && <EmployerSidebar />}
           {portal === 'admin' && <AdminSidebar />}

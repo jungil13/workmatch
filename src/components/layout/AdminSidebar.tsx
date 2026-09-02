@@ -35,7 +35,7 @@ export function AdminSidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 border-r border-slate-800 min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 shrink-0">
+    <aside className="w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between p-4 shrink-0">
       <div className="space-y-6">
         {/* Admin status pill */}
         <div className="bg-slate-800 p-3.5 rounded-2xl border border-slate-700 flex items-center gap-3">
