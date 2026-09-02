@@ -11,6 +11,7 @@ export interface ModalProps {
   description?: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  className?: string;
 }
 
 export function Modal({
@@ -20,6 +21,7 @@ export function Modal({
   description,
   children,
   maxWidth = 'lg',
+  className,
 }: ModalProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -57,7 +59,8 @@ export function Modal({
       <div
         className={cn(
           'relative w-full rounded-2xl bg-white p-6 shadow-2xl transition-all animate-slide-up z-10 my-8 max-h-[90vh] overflow-y-auto',
-          maxWidths[maxWidth]
+          maxWidths[maxWidth],
+          className
         )}
       >
         <button

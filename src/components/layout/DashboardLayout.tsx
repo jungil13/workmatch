@@ -63,12 +63,16 @@ export function DashboardLayout({
       const meta = user.user_metadata;
       const fallbackName = meta?.first_name || meta?.full_name?.split(' ')[0] || user.email?.split('@')[0] || 'User';
       const fallbackLastName = meta?.last_name || meta?.full_name?.split(' ').slice(1).join(' ') || '';
+      const fallbackAvatar = meta?.avatar_url || meta?.picture || null;
       setUserProfile(
-        profile || {
-          first_name: fallbackName,
-          last_name: fallbackLastName,
-          role: portal === 'employer' ? 'employer' : portal === 'admin' ? 'admin' : 'job_seeker',
-        }
+        profile
+          ? { ...profile, avatar_url: profile.avatar_url || fallbackAvatar }
+          : {
+              first_name: fallbackName,
+              last_name: fallbackLastName,
+              avatar_url: fallbackAvatar,
+              role: portal === 'employer' ? 'employer' : portal === 'admin' ? 'admin' : 'job_seeker',
+            }
       );
 
       // 2. Fetch initial notifications
@@ -409,9 +413,17 @@ export function DashboardLayout({
 
             {/* Profile Avatar & Sign Out */}
             <div className="flex items-center gap-3 pl-3 border-l border-border">
-              <div className="w-8 h-8 rounded-full bg-mint-100 text-mint-800 font-bold text-xs flex items-center justify-center border border-mint-200">
-                {userProfile?.first_name ? userProfile.first_name[0] : 'U'}
-              </div>
+              {userProfile?.avatar_url ? (
+                <img
+                  src={userProfile.avatar_url}
+                  alt={userProfile.first_name || 'User'}
+                  className="w-8 h-8 rounded-full object-cover border border-mint-200 shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-mint-100 text-mint-800 font-bold text-xs flex items-center justify-center border border-mint-200 shrink-0">
+                  {userProfile?.first_name ? userProfile.first_name[0] : 'U'}
+                </div>
+              )}
               <div className="hidden sm:block text-left">
                 <p className="text-xs font-bold text-dark leading-tight">
                   {userProfile?.first_name} {userProfile?.last_name || ''}

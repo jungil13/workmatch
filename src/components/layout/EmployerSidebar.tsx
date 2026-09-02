@@ -25,7 +25,6 @@ export function EmployerSidebar() {
     { name: 'Post a Job', href: '/employer/jobs/create', icon: PlusCircle },
     { name: 'Job Postings', href: '/employer/jobs', icon: Briefcase },
     { name: 'Applicant Pipeline', href: '/employer/applicants', icon: Users },
-    { name: 'AI Candidate Finder', href: '/employer/candidates', icon: UserCheck },
     { name: 'Interviews', href: '/employer/interviews', icon: Calendar },
     { name: 'HR Analytics', href: '/employer/analytics', icon: BarChart3 },
     { name: 'Company Profile', href: '/employer/profile', icon: Building },

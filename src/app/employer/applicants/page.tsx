@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -12,6 +12,7 @@ import {
   MapPin,
   CheckCircle2,
   ChevronDown,
+  Download,
 } from 'lucide-react';
 
 export default function EmployerApplicantsPage() {
@@ -24,7 +25,26 @@ export default function EmployerApplicantsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchApplications();
+    let channel: any = null;
+    fetchApplications().then(() => {
+      // Subscribe to real-time changes on applications
+      channel = supabase
+        .channel(`public:applications:employer-${Date.now()}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'applications' },
+          (payload) => {
+            fetchApplications();
+          }
+        )
+        .subscribe();
+    });
+    
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, []);
 
   async function fetchApplications() {
@@ -44,8 +64,9 @@ export default function EmployerApplicantsPage() {
       .select(`
         *,
         job:jobs!inner(title, company_id, city),
+        resume:documents(*),
         applicant:profiles(
-          id, first_name, last_name, email, phone,
+          id, first_name, last_name, email, phone, avatar_url,
           job_seeker_profile:job_seeker_profiles(city, province, professional_title, bio),
           skills:job_seeker_skills(id, proficiency, skill:skills(name))
         )
@@ -56,6 +77,19 @@ export default function EmployerApplicantsPage() {
     setApplications(data ?? []);
     setLoading(false);
   }
+
+  const handleDownloadResume = async (filePath: string) => {
+    try {
+      const { data, error } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60);
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error downloading resume:', err);
+      alert('Failed to download resume. Please try again later.');
+    }
+  };
 
   const stages: ApplicationStatus[] = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'];
 
@@ -152,14 +186,26 @@ export default function EmployerApplicantsPage() {
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-mint-500 to-mint-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm">
-                        {app.applicant?.first_name?.[0] || 'U'}{app.applicant?.last_name?.[0] || ''}
-                      </div>
+                      {app.applicant?.avatar_url ? (
+                        <img
+                          src={app.applicant.avatar_url}
+                          alt={app.applicant.first_name || 'Applicant'}
+                          className="w-12 h-12 rounded-full object-cover border border-mint-200 shadow-sm shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-mint-500 to-mint-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm">
+                          {app.applicant?.first_name?.[0] || 'U'}{app.applicant?.last_name?.[0] || ''}
+                        </div>
+                      )}
                       <div>
                         <h4 className="text-sm font-bold text-dark">
                           {app.applicant?.first_name} {app.applicant?.last_name}
                         </h4>
                         <p className="text-xs text-mint-700 font-semibold">{app.job?.title}</p>
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          <p>{app.applicant?.email}</p>
+                          {app.applicant?.phone && <p>{app.applicant.phone}</p>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -173,6 +219,20 @@ export default function EmployerApplicantsPage() {
                       Applied on {new Date(app.applied_at).toLocaleDateString()}
                     </p>
                   </div>
+
+                  {app.resume && (
+                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
+                      <span className="font-semibold truncate max-w-[150px] text-slate-700">
+                        📄 {app.resume.file_name}
+                      </span>
+                      <button 
+                        onClick={() => handleDownloadResume(app.resume.file_path)}
+                        className="text-[10px] text-mint-700 font-bold bg-mint-50 px-2 py-1 rounded-md border border-mint-200 hover:bg-mint-100 transition-colors flex items-center gap-1"
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    </div>
+                  )}
 
                   {app.applicant?.skills && app.applicant.skills.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">

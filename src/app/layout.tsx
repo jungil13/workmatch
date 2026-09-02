@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
+import { Poppins } from 'next/font/google';
 import "./globals.css";
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: "WorkMatch — AI Skill & Location-Based Job Finder System",
@@ -14,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full bg-background antialiased">
-      <body className="min-h-full flex flex-col selection:bg-mint-200 selection:text-dark font-sans">
+      <body className={`min-h-full flex flex-col selection:bg-mint-200 selection:text-dark ${poppins.className}`}>
         <div className="flex-1 flex flex-col">
           {children}
         </div>

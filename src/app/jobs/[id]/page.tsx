@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
+import { ApplyModal } from '@/components/applications/ApplyModal';
+import { MatchScoreGauge } from '@/components/matching/MatchScoreGauge';
+import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { supabase } from '@/lib/supabase/client';
 import { formatSalaryRange, formatRelativeTime } from '@/lib/utils';
 import {
@@ -18,7 +20,9 @@ import {
   Sparkles,
   CheckCircle2,
   ArrowLeft,
-  Send,
+  Clock,
+  Briefcase,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,18 +32,44 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-  const [coverLetter, setCoverLetter] = useState('');
-  const [isApplying, setIsApplying] = useState(false);
-  const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [userId, setUserId] = useState('');
+  const [matchResult, setMatchResult] = useState<any | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         setUserId(user.id);
-        supabase.from('saved_jobs').select('id').eq('user_id', user.id).eq('job_id', resolvedParams.id).maybeSingle().then(({ data }) => {
-          if (data) setIsSaved(true);
-        });
+        // Check if job is saved
+        supabase
+          .from('saved_jobs')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('job_id', resolvedParams.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) setIsSaved(true);
+          });
+
+        // Fetch candidate evaluation data for match score calculation
+        const [seekerRes, skillsRes, eduRes] = await Promise.all([
+          supabase.from('job_seeker_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+          supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('user_id', user.id),
+          supabase.from('educations').select('*').eq('user_id', user.id),
+        ]);
+
+        if (seekerRes.data) {
+          const candidateData = {
+            profile: seekerRes.data,
+            skills: skillsRes.data || [],
+            educations: eduRes.data || [],
+          };
+
+          // If job already loaded, calculate match
+          if (job) {
+            const calculated = calculateJobMatch(job, candidateData as any);
+            setMatchResult(calculated);
+          }
+        }
       }
     });
 
@@ -48,9 +78,28 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
       .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
       .eq('id', resolvedParams.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         setJob(data);
         setLoading(false);
+
+        // Calculate match if user is logged in
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && data) {
+          const [seekerRes, skillsRes, eduRes] = await Promise.all([
+            supabase.from('job_seeker_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+            supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('user_id', user.id),
+            supabase.from('educations').select('*').eq('user_id', user.id),
+          ]);
+
+          if (seekerRes.data) {
+            const calculated = calculateJobMatch(data, {
+              profile: seekerRes.data,
+              skills: skillsRes.data || [],
+              educations: eduRes.data || [],
+            } as any);
+            setMatchResult(calculated);
+          }
+        }
       });
   }, [resolvedParams.id]);
 
@@ -93,31 +142,15 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
       await supabase.from('saved_jobs').delete().eq('user_id', userId).eq('job_id', job.id);
       setIsSaved(false);
     } else {
-      await supabase.from('saved_jobs').upsert({ user_id: userId, job_id: job.id, saved_at: new Date().toISOString() });
+      await supabase.from('saved_jobs').upsert(
+        { user_id: userId, job_id: job.id },
+        { onConflict: 'user_id,job_id' }
+      );
       setIsSaved(true);
     }
   };
 
-  const handleApply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) {
-      router.push('/auth/seeker/sign-in');
-      return;
-    }
-    setIsApplying(true);
-
-    await supabase.from('applications').insert({
-      applicant_id: userId,
-      job_id: job.id,
-      cover_letter: coverLetter,
-      status: 'applied',
-      match_score: 0,
-      applied_at: new Date().toISOString(),
-    });
-
-    setIsApplying(false);
-    setAppliedSuccess(true);
-  };
+  const skillsList = job.required_skills || (job as any).job_skills || [];
 
   return (
     <div className="min-h-screen flex flex-col bg-background selection:bg-mint-200">
@@ -141,7 +174,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
             {/* Header Card */}
             <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-soft space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
+                <div className="flex items-start gap-4 min-w-0">
                   <div className="w-16 h-16 rounded-2xl border border-border bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
                     {job.company?.logo_url ? (
                       <img src={job.company.logo_url} alt={job.company.name} className="w-full h-full object-cover" />
@@ -149,7 +182,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                       <Building2 className="w-8 h-8 text-slate-400" />
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <Link
                       href={`/companies/${job.company_id}`}
                       className="text-xs font-bold text-mint-700 hover:underline flex items-center gap-1"
@@ -160,10 +193,21 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                     <h1 className="text-2xl sm:text-3xl font-black text-dark tracking-tight mt-0.5">
                       {job.title}
                     </h1>
+                    <p className="text-xs text-muted flex items-center gap-2 mt-1">
+                      <span>Posted {formatRelativeTime(job.created_at)}</span>
+                      <span>•</span>
+                      <span>{job.views || 0} views</span>
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-3 shrink-0 self-end sm:self-start">
+                  {matchResult && (
+                    <div title={`${matchResult.overallScore}% AI Match`}>
+                      <MatchScoreGauge score={matchResult.overallScore} size="lg" />
+                    </div>
+                  )}
+
                   <button
                     onClick={handleToggleSave}
                     className={`p-2.5 rounded-xl border transition-colors ${
@@ -172,9 +216,11 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                         : 'border-border text-slate-400 hover:text-dark hover:bg-slate-50'
                     }`}
                     title={isSaved ? 'Remove from Saved' : 'Save Job'}
+                    aria-label={isSaved ? 'Remove from Saved' : 'Save Job'}
                   >
                     {isSaved ? <BookmarkCheck className="w-5 h-5 text-mint-600" /> : <Bookmark className="w-5 h-5" />}
                   </button>
+
                   <Button
                     variant="primary"
                     size="md"
@@ -221,14 +267,37 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
 
+            {/* Why You Match AI Insights */}
+            {matchResult && (
+              <div className="bg-mint-50/70 rounded-3xl border border-mint-200 p-6 shadow-soft space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-mint-950 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-mint-600" />
+                    AI Profile Match Analysis — {matchResult.overallScore}% Fit ({matchResult.tier})
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {matchResult.factors && Object.values(matchResult.factors).map((f: any, i: number) => (
+                    <div key={i} className="p-2.5 bg-white/80 rounded-xl border border-mint-100 flex items-start gap-2">
+                      <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${f.positive ? 'bg-mint-600' : 'bg-amber-500'}`} />
+                      <div>
+                        <p className="font-bold text-dark">{f.name}: {f.score}%</p>
+                        <p className="text-slate-600">{f.explanation}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Required Skills Section */}
-            {job.required_skills && job.required_skills.length > 0 && (
+            {skillsList.length > 0 && (
               <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-3">
                 <h3 className="text-sm font-bold text-dark uppercase tracking-wider">Required Skills & Tools</h3>
                 <div className="flex flex-wrap gap-2">
-                  {job.required_skills.map((skill: any) => (
+                  {skillsList.map((skill: any, i: number) => (
                     <span
-                      key={skill.id}
+                      key={skill.id || i}
                       className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-mint-50 text-mint-900 border border-mint-200 flex items-center gap-1.5"
                     >
                       <Sparkles className="w-3 h-3 text-mint-600" />
@@ -299,70 +368,31 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
               </div>
 
               {job.company_id && (
-                <Link href={`/companies/${job.company_id}`} className="block">
-                  <Button variant="outline" size="sm" className="w-full justify-center">
-                    View Company Profile
-                  </Button>
-                </Link>
+                <div className="space-y-2 pt-2">
+                  <Link href={`/companies/${job.company_id}`} className="block">
+                    <Button variant="outline" size="sm" className="w-full justify-center text-xs font-semibold">
+                      View Company Profile
+                    </Button>
+                  </Link>
+                  <Link href={`/seeker/reviews?companyId=${job.company_id}`} className="block">
+                    <Button variant="ghost" size="sm" className="w-full justify-center text-xs text-mint-700">
+                      Write a Company Review
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
           </div>
         </div>
       </main>
 
-      {/* Quick Job Application Modal */}
-      <Modal
+      {/* Resume Upload Application Modal */}
+      <ApplyModal
+        job={job}
         isOpen={isApplyModalOpen}
         onClose={() => setIsApplyModalOpen(false)}
-        title={`Apply for ${job.title}`}
-        description={`Submitting application to ${job.company?.name || 'the employer'}`}
-      >
-        {appliedSuccess ? (
-          <div className="text-center py-6 space-y-4">
-            <div className="w-14 h-14 rounded-full bg-mint-100 text-mint-700 flex items-center justify-center mx-auto shadow-sm">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-dark">Application Submitted!</h3>
-            <p className="text-xs text-slate-600 max-w-sm mx-auto">
-              Your profile and credentials were sent directly to the employer.
-            </p>
-            <div className="pt-3 flex gap-2 justify-center">
-              <Link href="/seeker/applications">
-                <Button variant="primary" size="sm">
-                  View in Applications Pipeline
-                </Button>
-              </Link>
-              <Button variant="outline" size="sm" onClick={() => setIsApplyModalOpen(false)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={handleApply} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">
-                Cover Note / Message to Recruiter (Optional)
-              </label>
-              <textarea
-                rows={4}
-                value={coverLetter}
-                onChange={(e) => setCoverLetter(e.target.value)}
-                placeholder="Share why you are interested in this role and your availability..."
-                className="w-full rounded-xl border border-border p-3 text-xs text-dark focus:border-mint-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsApplyModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" size="md" isLoading={isApplying}>
-                <Send className="w-3.5 h-3.5" /> Submit Application
-              </Button>
-            </div>
-          </form>
-        )}
-      </Modal>
+        matchScore={matchResult?.overallScore || 0}
+      />
 
       <Footer />
     </div>

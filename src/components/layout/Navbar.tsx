@@ -42,10 +42,12 @@ export function Navbar() {
         const firstName = userProfile?.first_name || meta?.first_name || currentUser.email?.split('@')[0] || 'User';
         const lastName = userProfile?.last_name || meta?.last_name || '';
         const role = userProfile?.role || meta?.role || 'job_seeker';
+        const avatarUrl = userProfile?.avatar_url || meta?.avatar_url || meta?.picture || null;
 
         setProfile({
           first_name: firstName,
           last_name: lastName,
+          avatar_url: avatarUrl,
           role,
         });
       }
@@ -122,9 +124,17 @@ export function Navbar() {
                   </Link>
 
                   <div className="flex items-center gap-2.5 pl-3 border-l border-border">
-                    <div className="w-8 h-8 rounded-full bg-mint-100 text-mint-800 font-bold text-xs flex items-center justify-center border border-mint-200">
-                      {profile?.first_name ? profile.first_name[0] : 'U'}
-                    </div>
+                    {profile?.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.first_name || 'User'}
+                        className="w-8 h-8 rounded-full object-cover border border-mint-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-mint-100 text-mint-800 font-bold text-xs flex items-center justify-center border border-mint-200 shrink-0">
+                        {profile?.first_name ? profile.first_name[0] : 'U'}
+                      </div>
+                    )}
                     <div className="text-left">
                       <p className="text-xs font-bold text-dark leading-tight line-clamp-1">
                         {profile?.first_name} {profile?.last_name || ''}
@@ -193,9 +203,17 @@ export function Navbar() {
               {user ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <div className="w-9 h-9 rounded-full bg-mint-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                      {profile?.first_name ? profile.first_name[0] : 'U'}
-                    </div>
+                    {profile?.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.first_name || 'User'}
+                        className="w-9 h-9 rounded-full object-cover border border-mint-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-mint-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                        {profile?.first_name ? profile.first_name[0] : 'U'}
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs font-bold text-dark">{profile?.first_name} {profile?.last_name}</p>
                       <p className="text-[11px] text-muted capitalize">{profile?.role?.replace('_', ' ')}</p>

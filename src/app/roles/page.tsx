@@ -47,7 +47,7 @@ export default function RoleSelectionPage() {
               <div className="space-y-2 pt-2 border-t border-slate-100 text-xs text-slate-700">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-mint-500 shrink-0" />
-                  <span>AI Skill Scanner & OCR Diploma Verification</span>
+                  <span>AI Job Recommendations & Diploma Verification</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-mint-500 shrink-0" />

@@ -36,7 +36,7 @@ export function Footer() {
             <h4 className="text-sm font-bold text-white uppercase tracking-wider">Job Seekers</h4>
             <ul className="space-y-2 text-sm text-slate-400">
               <li><Link href="/jobs" className="hover:text-mint-400 transition-colors">Find Matching Jobs</Link></li>
-              <li><Link href="/seeker/scanner" className="hover:text-mint-400 transition-colors">AI Skill Scanner</Link></li>
+              <li><Link href="/seeker/scanner" className="hover:text-mint-400 transition-colors">AI Job Recommendations</Link></li>
               <li><Link href="/seeker/diploma" className="hover:text-mint-400 transition-colors">Diploma Verification</Link></li>
               <li><Link href="/seeker/dashboard" className="hover:text-mint-400 transition-colors">Seeker Dashboard</Link></li>
               <li><Link href="/reviews" className="hover:text-mint-400 transition-colors">Company Reviews</Link></li>

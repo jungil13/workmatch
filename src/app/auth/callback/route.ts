@@ -7,6 +7,12 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/seeker/dashboard';
 
+  // Support Vercel reverse proxy headers for accurate production origin
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+  const isLocalEnv = process.env.NODE_ENV === 'development';
+  const baseUrl = !isLocalEnv && forwardedHost ? `${forwardedProto}://${forwardedHost}` : origin;
+
   if (code) {
     const cookieStore = await cookies();
 
@@ -37,15 +43,19 @@ export async function GET(request: NextRequest) {
         .eq('id', data.user.id)
         .maybeSingle();
 
+      const meta = data.user.user_metadata;
+      const googleAvatar = meta?.avatar_url || meta?.picture || null;
+      const firstName = meta?.first_name || meta?.full_name?.split(' ')[0] || meta?.name?.split(' ')[0] || 'User';
+      const lastName = meta?.last_name || meta?.full_name?.split(' ').slice(1).join(' ') || meta?.name?.split(' ').slice(1).join(' ') || '';
+
       if (!existingProfile) {
         // First-time Google login — create profile row
-        const meta = data.user.user_metadata;
         await supabase.from('profiles').upsert({
           id: data.user.id,
           email: data.user.email!,
-          first_name: meta?.full_name?.split(' ')[0] || meta?.name?.split(' ')[0] || 'User',
-          last_name: meta?.full_name?.split(' ').slice(1).join(' ') || meta?.name?.split(' ').slice(1).join(' ') || '',
-          avatar_url: meta?.avatar_url || meta?.picture || null,
+          first_name: firstName,
+          last_name: lastName,
+          avatar_url: googleAvatar,
           role: 'job_seeker',
           status: 'active',
           updated_at: new Date().toISOString(),
@@ -71,16 +81,25 @@ export async function GET(request: NextRequest) {
           allow_employer_contact: true,
           preferred_search_radius: 25,
         });
+      } else if (googleAvatar) {
+        // Update avatar if present in Google metadata
+        await supabase
+          .from('profiles')
+          .update({
+            avatar_url: googleAvatar,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', data.user.id);
       }
 
       // Redirect to correct portal based on role
       const role = existingProfile?.role || 'job_seeker';
-      if (role === 'admin') return NextResponse.redirect(`${origin}/admin`);
-      if (role === 'employer') return NextResponse.redirect(`${origin}/employer/dashboard`);
-      return NextResponse.redirect(`${origin}/seeker/dashboard`);
+      if (role === 'admin') return NextResponse.redirect(`${baseUrl}/admin`);
+      if (role === 'employer') return NextResponse.redirect(`${baseUrl}/employer/dashboard`);
+      return NextResponse.redirect(`${baseUrl}/seeker/dashboard`);
     }
   }
 
   // OAuth error — redirect back to sign in
-  return NextResponse.redirect(`${origin}/auth/seeker/sign-in?error=oauth_error`);
+  return NextResponse.redirect(`${baseUrl}/auth/seeker/sign-in?error=oauth_error`);
 }

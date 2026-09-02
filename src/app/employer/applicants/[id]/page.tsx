@@ -18,6 +18,7 @@ import {
   Briefcase,
   GraduationCap,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 
 export default function EmployerApplicantDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +34,26 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
   const [scheduledSuccess, setScheduledSuccess] = useState(false);
 
   useEffect(() => {
-    fetchApplication();
+    let channel: any = null;
+    fetchApplication().then(() => {
+      // Subscribe to real-time changes for this specific application
+      channel = supabase
+        .channel(`public:applications:${resolvedParams.id}-${Date.now()}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'applications', filter: `id=eq.${resolvedParams.id}` },
+          (payload) => {
+            fetchApplication();
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [resolvedParams.id]);
 
   async function fetchApplication() {
@@ -43,6 +63,7 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
         *,
         job:jobs(*, company:companies(*)),
         interview:interviews(*),
+        resume:documents(*),
         applicant:profiles(
           id, first_name, last_name, email, phone,
           job_seeker_profile:job_seeker_profiles(*),
@@ -58,14 +79,33 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
     setLoading(false);
   }
 
+  const handleDownloadResume = async (filePath: string) => {
+    try {
+      const { data, error } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60);
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error downloading resume:', err);
+      alert('Failed to download resume. Please try again later.');
+    }
+  };
+
   const handleScheduleInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!application) return;
 
+    const parsedDate = new Date(interviewDate);
+    if (isNaN(parsedDate.getTime())) {
+      alert("Please select a valid date and time.");
+      return;
+    }
+
     await supabase.from('interviews').insert({
       application_id: application.id,
       status: 'scheduled',
-      scheduled_at: new Date(interviewDate).toISOString(),
+      scheduled_at: parsedDate.toISOString(),
       duration_minutes: Number(durationMinutes),
       meeting_url: meetingUrl,
       notes: interviewNotes,
@@ -160,6 +200,10 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
                     <MapPin className="w-3.5 h-3.5 text-mint-500" />
                     {application.applicant?.job_seeker_profile?.city || 'Location not provided'}
                   </p>
+                  <div className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-3">
+                    <p>{application.applicant?.email}</p>
+                    {application.applicant?.phone && <p>• {application.applicant.phone}</p>}
+                  </div>
                 </div>
               </div>
 
@@ -173,6 +217,21 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
               <p className="text-xs text-slate-700 leading-relaxed pt-3 border-t border-border">
                 {application.applicant.job_seeker_profile.bio}
               </p>
+            )}
+
+            {application.resume && (
+              <div className="pt-4 border-t border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📄</span>
+                  <div>
+                    <p className="text-sm font-bold text-dark truncate max-w-[200px] sm:max-w-[300px]">{application.resume.file_name}</p>
+                    <p className="text-[10px] text-muted">Uploaded Resume</p>
+                  </div>
+                </div>
+                <Button variant="mint-soft" size="sm" onClick={() => handleDownloadResume(application.resume.file_path)} className="font-bold">
+                  <Download className="w-3.5 h-3.5" /> Download
+                </Button>
+              </div>
             )}
           </div>
 
@@ -239,25 +298,30 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
             </div>
           </div>
 
-          {application.interview && (
-            <div className="bg-mint-50 border border-mint-200 rounded-3xl p-6 shadow-soft space-y-3 text-xs">
-              <div className="flex items-center gap-2 font-bold text-mint-900">
-                <Calendar className="w-4 h-4 text-mint-600" /> Scheduled Interview
-              </div>
-              <p className="font-bold text-dark">
-                {new Date(application.interview.scheduled_at).toLocaleString()}
-              </p>
-              {application.interview.meeting_url && (
-                <a
-                  href={application.interview.meeting_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block text-mint-700 font-bold underline"
-                >
-                  Join Meeting URL →
-                </a>
-              )}
-            </div>
+          {application.interview && (Array.isArray(application.interview) ? application.interview.length > 0 : true) && (
+            (() => {
+              const interview = Array.isArray(application.interview) ? application.interview[0] : application.interview;
+              return (
+                <div className="bg-mint-50 border border-mint-200 rounded-3xl p-6 shadow-soft space-y-3 text-xs">
+                  <div className="flex items-center gap-2 font-bold text-mint-900">
+                    <Calendar className="w-4 h-4 text-mint-600" /> Scheduled Interview
+                  </div>
+                  <p className="font-bold text-dark">
+                    {new Date(interview.scheduled_at).toLocaleString()}
+                  </p>
+                  {interview.meeting_url && (
+                    <a
+                      href={interview.meeting_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-mint-700 font-bold underline"
+                    >
+                      Join Meeting URL →
+                    </a>
+                  )}
+                </div>
+              );
+            })()
           )}
         </div>
       </div>
@@ -281,8 +345,24 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
               type="datetime-local"
               value={interviewDate}
               onChange={(e) => setInterviewDate(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
               required
             />
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700">Duration</label>
+              <select
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                className="w-full h-11 rounded-xl border border-border bg-white px-3 text-sm text-dark focus:border-mint-500 focus:outline-none"
+              >
+                <option value={15}>15 Minutes</option>
+                <option value={30}>30 Minutes</option>
+                <option value={45}>45 Minutes</option>
+                <option value={60}>1 Hour</option>
+                <option value={90}>1.5 Hours</option>
+              </select>
+            </div>
 
             <Input
               label="Meeting URL (Google Meet / Zoom / MS Teams)"

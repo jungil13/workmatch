@@ -160,8 +160,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-dark">Employee Ratings & Reviews</h3>
-              <Link href="/seeker/reviews">
-                <Button variant="outline" size="sm">Write a Review</Button>
+              <Link href={`/seeker/reviews?companyId=${company.id}`}>
+                <Button variant="primary" size="sm" className="shadow-sm">
+                  Write a Review
+                </Button>
               </Link>
             </div>
 

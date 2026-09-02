@@ -19,29 +19,41 @@ export function calculateJobMatch(
   const whyYouMatch: string[] = [];
   const growthAreas: string[] = [];
 
+  const profile = candidate?.profile || ({} as any);
+  const candidateSkills = candidate?.skills || [];
+  const candidateEducations = candidate?.educations || [];
+
   // --- 1. SKILLS MATCH (40%) ---
-  const requiredSkills = job.required_skills || [];
-  const candidateSkills = candidate.skills || [];
+  const requiredSkills = job.required_skills || (job as any).job_skills || [];
   
   let skillsScore = 0;
   let matchedSkillsCount = 0;
 
-  if (requiredSkills.length === 0) {
+  if (!requiredSkills || requiredSkills.length === 0) {
     skillsScore = 85;
     whyYouMatch.push('General skills requirements are aligned');
   } else {
     let weightedMatched = 0;
     
-    requiredSkills.forEach((reqSkill) => {
-      const found = candidateSkills.find(
-        (cs) => cs.skill?.name.toLowerCase() === reqSkill.name.toLowerCase() ||
-                cs.skill_id === reqSkill.id
-      );
+    requiredSkills.forEach((reqSkill: any) => {
+      const reqName = (reqSkill?.name || reqSkill?.skill?.name || '').trim().toLowerCase();
+      const reqId = reqSkill?.skill_id || reqSkill?.id || reqSkill?.skill?.id;
+      const minProf = reqSkill?.minimum_proficiency || 3;
+
+      const found = candidateSkills.find((cs: any) => {
+        const candName = (cs?.skill?.name || cs?.name || '').trim().toLowerCase();
+        const candId = cs?.skill_id || cs?.skill?.id || cs?.id;
+
+        const nameMatches = Boolean(reqName && candName && reqName === candName);
+        const idMatches = Boolean(reqId && candId && reqId === candId);
+
+        return nameMatches || idMatches;
+      });
 
       if (found) {
         matchedSkillsCount++;
         // Proficiency match bonus (1-5 scale)
-        const profRatio = Math.min(1.2, (found.proficiency || 3) / (reqSkill.minimum_proficiency || 3));
+        const profRatio = Math.min(1.2, (found.proficiency || 3) / minProf);
         const verifiedBonus = found.verified ? 1.15 : 1.0;
         weightedMatched += Math.min(1.0, profRatio * 0.9 * verifiedBonus);
       }
@@ -55,10 +67,14 @@ export function calculateJobMatch(
     } else if (matchedSkillsCount > 0) {
       whyYouMatch.push(`✓ ${matchedSkillsCount} of ${requiredSkills.length} core skills match`);
     } else {
-      growthAreas.push(`Missing key required skills: ${requiredSkills.slice(0, 3).map(s => s.name).join(', ')}`);
+      const sampleNames = requiredSkills
+        .slice(0, 3)
+        .map((s: any) => s.name || s.skill?.name || 'Skill')
+        .filter(Boolean);
+      growthAreas.push(`Missing key required skills: ${sampleNames.join(', ')}`);
     }
 
-    const verifiedCount = candidateSkills.filter(s => s.verified).length;
+    const verifiedCount = candidateSkills.filter((s: any) => s.verified).length;
     if (verifiedCount > 0) {
       whyYouMatch.push(`✓ ${verifiedCount} verified skill credential${verifiedCount > 1 ? 's' : ''}`);
     }
@@ -66,8 +82,8 @@ export function calculateJobMatch(
 
   // --- 2. EXPERIENCE MATCH (20%) ---
   let expScore = 70;
-  const seekerExpYears = candidate.profile.years_experience || 0;
-  const expLevel = job.experience_level;
+  const seekerExpYears = Number(profile?.years_experience) || 0;
+  const expLevel = job.experience_level || 'Mid Level';
 
   let expectedYears = 1;
   if (expLevel === 'Entry Level') expectedYears = 1;
@@ -94,13 +110,13 @@ export function calculateJobMatch(
     locScore = 100;
     whyYouMatch.push('✓ Fully Remote position — anywhere in the Philippines');
   } else if (
-    candidate.profile.latitude !== undefined &&
-    candidate.profile.longitude !== undefined &&
+    profile.latitude !== undefined &&
+    profile.longitude !== undefined &&
     job.latitude !== undefined &&
     job.longitude !== undefined
   ) {
     distanceKm = calculateHaversineDistance(
-      { latitude: candidate.profile.latitude, longitude: candidate.profile.longitude },
+      { latitude: profile.latitude, longitude: profile.longitude },
       { latitude: job.latitude, longitude: job.longitude }
     );
 
@@ -117,11 +133,11 @@ export function calculateJobMatch(
       locScore = 60;
     } else {
       locScore = 40;
-      growthAreas.push(`Located ${distanceKm.toFixed(1)} km away (${job.city})`);
+      growthAreas.push(`Located ${distanceKm.toFixed(1)} km away (${job.city || 'Philippines'})`);
     }
   } else {
     // City match fallback
-    if (candidate.profile.city && job.city && candidate.profile.city.toLowerCase() === job.city.toLowerCase()) {
+    if (profile.city && job.city && profile.city.toLowerCase() === job.city.toLowerCase()) {
       locScore = 95;
       whyYouMatch.push(`✓ Located in same city (${job.city})`);
     } else {
@@ -131,25 +147,25 @@ export function calculateJobMatch(
 
   // --- 4. EDUCATION MATCH (10%) ---
   let eduScore = 70;
-  const verifiedEdu = candidate.educations?.some(e => e.verified);
-  const hasDegree = candidate.educations && candidate.educations.length > 0;
+  const verifiedEdu = candidateEducations.some((e: any) => e.verified);
+  const hasDegree = candidateEducations.length > 0;
 
   if (verifiedEdu) {
     eduScore = 100;
     whyYouMatch.push('✓ Verified college degree on file');
   } else if (hasDegree) {
     eduScore = 90;
-    whyYouMatch.push(`✓ Educational background in ${candidate.educations[0].field_of_study || 'relevant field'}`);
+    whyYouMatch.push(`✓ Educational background in ${candidateEducations[0].field_of_study || 'relevant field'}`);
   } else {
     eduScore = 60;
   }
 
   // --- 5. SALARY ALIGNMENT (5%) ---
   let salaryScore = 80;
-  const prefMin = candidate.profile.preferred_salary_min;
-  const prefMax = candidate.profile.preferred_salary_max;
+  const prefMin = profile.preferred_salary_min ? Number(profile.preferred_salary_min) : undefined;
+  const prefMax = profile.preferred_salary_max ? Number(profile.preferred_salary_max) : undefined;
 
-  if (prefMin && prefMax) {
+  if (prefMin && prefMax && job.salary_max && job.salary_min) {
     if (job.salary_max >= prefMin && job.salary_min <= prefMax) {
       salaryScore = 100;
       whyYouMatch.push('✓ Salary range matches your preferences');
@@ -165,10 +181,10 @@ export function calculateJobMatch(
 
   // --- 6. AVAILABILITY (5%) ---
   let availScore = 80;
-  if (candidate.profile.availability === 'Immediate') {
+  if (profile.availability === 'Immediate') {
     availScore = 100;
     whyYouMatch.push('✓ Available to start immediately');
-  } else if (candidate.profile.availability === '2 Weeks Notice' || candidate.profile.availability === 'Actively Looking') {
+  } else if (profile.availability === '2 Weeks Notice' || profile.availability === 'Actively Looking') {
     availScore = 90;
   } else {
     availScore = 70;
@@ -222,7 +238,7 @@ export function calculateJobMatch(
         weight: 0.20,
         score: locScore,
         weightedScore: Math.round(locScore * 0.20),
-        explanation: job.work_arrangement === 'Remote' ? 'Remote location' : distanceKm ? `${distanceKm.toFixed(1)} km away in ${job.city}` : `Located in ${job.city}`,
+        explanation: job.work_arrangement === 'Remote' ? 'Remote location' : distanceKm ? `${distanceKm.toFixed(1)} km away in ${job.city || 'target area'}` : `Located in ${job.city || 'target area'}`,
         positive: locScore >= 75,
       },
       education: {
@@ -230,7 +246,7 @@ export function calculateJobMatch(
         weight: 0.10,
         score: eduScore,
         weightedScore: Math.round(eduScore * 0.10),
-        explanation: hasDegree ? `${candidate.educations[0].degree} in ${candidate.educations[0].field_of_study}` : 'Degree/Certificates',
+        explanation: hasDegree ? `${candidateEducations[0].degree || 'Degree'} in ${candidateEducations[0].field_of_study || 'field'}` : 'Degree/Certificates',
         positive: eduScore >= 75,
       },
       salary: {
@@ -246,12 +262,12 @@ export function calculateJobMatch(
         weight: 0.05,
         score: availScore,
         weightedScore: Math.round(availScore * 0.05),
-        explanation: candidate.profile.availability || 'Immediate',
+        explanation: profile.availability || 'Immediate',
         positive: availScore >= 80,
       },
     },
-    whyYouMatch: whyYouMatch.slice(0, 5),
-    growthAreas: growthAreas.slice(0, 3),
+    whyYouMatch,
+    growthAreas,
     distanceKm,
     matchedSkillsCount,
     totalRequiredSkillsCount: requiredSkills.length,
