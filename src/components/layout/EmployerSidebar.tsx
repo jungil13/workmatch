@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 import {
   LayoutDashboard,
   PlusCircle,
@@ -19,6 +20,49 @@ import {
 
 export function EmployerSidebar() {
   const pathname = usePathname();
+  const [companyName, setCompanyName] = useState('Loading...');
+  const [companyInitials, setCompanyInitials] = useState('...');
+
+  useEffect(() => {
+    async function loadCompany() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setCompanyName('Guest Company');
+          setCompanyInitials('GC');
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('employer_profiles')
+          .select('company:companies(name)')
+          .eq('user_id', user.id)
+          .single();
+
+        // @ts-ignore - Supabase join typing can be tricky
+        const name = profile?.company?.name || profile?.company?.[0]?.name;
+        
+        if (name) {
+          setCompanyName(name);
+          const initials = name
+            .split(' ')
+            .map((n: string) => n[0])
+            .join('')
+            .substring(0, 2)
+            .toUpperCase();
+          setCompanyInitials(initials);
+        } else {
+          setCompanyName('Your Company');
+          setCompanyInitials('YC');
+        }
+      } catch (err) {
+        console.error('Error loading company:', err);
+        setCompanyName('Your Company');
+        setCompanyInitials('YC');
+      }
+    }
+    loadCompany();
+  }, []);
 
   const links = [
     { name: 'Dashboard', href: '/employer/dashboard', icon: LayoutDashboard },
@@ -37,10 +81,10 @@ export function EmployerSidebar() {
         {/* Company preview snippet */}
         <div className="bg-mint-50/60 p-3.5 rounded-2xl border border-mint-100 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-dark text-white font-bold flex items-center justify-center shrink-0 shadow-sm">
-            AT
+            {companyInitials}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-bold text-dark truncate">Archipelago Tech</h4>
+            <h4 className="text-xs font-bold text-dark truncate">{companyName}</h4>
             <p className="text-[11px] text-mint-700 font-medium truncate flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-mint-600" /> SEC Verified
             </p>

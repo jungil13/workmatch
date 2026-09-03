@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
@@ -18,7 +19,10 @@ import {
 } from 'lucide-react';
 
 export default function LandingPage() {
+  const router = useRouter();
   const [featuredJobs, setFeaturedJobs] = useState<any[]>([]);
+  const [keyword, setKeyword] = useState('');
+  const [location, setLocation] = useState('');
 
   useEffect(() => {
     supabase
@@ -32,114 +36,113 @@ export default function LandingPage() {
       });
   }, []);
 
+  const handleSearch = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/auth/seeker/sign-in');
+      return;
+    }
+    const query = new URLSearchParams();
+    if (keyword) query.set('keyword', keyword);
+    if (location) query.set('city', location);
+    router.push(`/jobs?${query.toString()}`);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background selection:bg-mint-200">
       <Navbar />
-
       {/* 1. HERO SECTION */}
-      <section className="relative overflow-hidden pt-12 pb-20 md:py-24 mint-gradient-hero border-b border-border">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-mint-300/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-10 right-10 w-72 h-72 bg-emerald-200/20 rounded-full blur-2xl pointer-events-none" />
+      <section className="relative overflow-hidden pt-24 pb-32 flex flex-col items-center justify-center text-center bg-gradient-to-br from-[#1b3b4d] via-[#16514e] to-[#126b4f] min-h-[90vh]">
+        {/* Floating Lights Effects */}
+        <div className="absolute top-0 left-1/4 w-[30rem] h-[30rem] bg-emerald-400/30 rounded-full mix-blend-screen filter blur-3xl opacity-50 pointer-events-none animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-[30rem] h-[30rem] bg-teal-400/20 rounded-full mix-blend-screen filter blur-3xl opacity-50 pointer-events-none animate-pulse delay-700" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-mint-500/20 rounded-full mix-blend-screen filter blur-3xl opacity-40 pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            {/* Left Headline */}
-            <div className="lg:col-span-7 space-y-6 text-left">
-              <div className="inline-flex items-center gap-2 bg-white/90 border border-mint-200 px-3.5 py-1.5 rounded-full shadow-soft">
-                <Sparkles className="w-4 h-4 text-mint-600" />
-                <span className="text-xs font-bold text-mint-800 tracking-wide">
-                  AI-Powered Skill & Location Matching
-                </span>
-              </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-10 flex flex-col items-center w-full">
+          
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 bg-emerald-900/40 border border-emerald-500/30 backdrop-blur-md px-4 py-1.5 rounded-full shadow-lg">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-emerald-100 tracking-wide">
+              AI-Powered Job Matching
+            </span>
+          </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-dark tracking-tight leading-[1.1]">
-                Find the Right Job. <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-mint-500 to-mint-700">
-                  Near You.
-                </span>
-              </h1>
+          {/* Headline */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.2]">
+            Find <span className="text-[#60e0a8] px-3 py-1 rounded-lg">Nearby Jobs</span> That<br/>
+            Fit Your <span className="text-[#60e0a8] px-3 py-1 rounded-lg">Exact Skills</span>
+          </h1>
 
-              <p className="text-lg text-slate-600 max-w-xl leading-relaxed">
-                WorkMatch connects your skills, experience, and location with opportunities that fit you. Transparent match scores and verified credentials for genuine career growth.
-              </p>
+          {/* Subheadline */}
+          <p className="text-base md:text-lg text-emerald-50/70 max-w-3xl mx-auto leading-relaxed">
+            WorkMatch analyzes your skills, certifications, and location to instantly connect you with the highest-matching opportunities within your preferred radius.
+          </p>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <Link href="/seeker/find-jobs">
-                  <Button variant="primary" size="lg" className="shadow-md">
-                    Find Your Match <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </Link>
-                <Link href="/employer/dashboard">
-                  <Button variant="outline" size="lg">
-                    <Briefcase className="w-4 h-4 text-slate-600" /> Hire Talent
-                  </Button>
-                </Link>
-              </div>
+          {/* Search Bar */}
+          <div className="w-full max-w-4xl bg-white rounded-[2rem] md:rounded-full p-2 flex flex-col md:flex-row items-center gap-2 shadow-2xl relative z-20">
+            <div className="flex-1 flex items-center gap-3 px-4 py-3 w-full border-b md:border-b-0 md:border-r border-slate-100">
+              <Sparkles className="w-5 h-5 text-slate-400 shrink-0" />
+              <input 
+                type="text" 
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="Job title, skills, or certifications" 
+                className="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 text-sm md:text-base font-medium"
+              />
+            </div>
+            
+            <div className="hidden md:block w-px h-8 bg-slate-200" />
 
-              {/* Key trust bullets */}
-              <div className="pt-6 border-t border-mint-100 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-600 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Transparent 6-Factor AI Scoring
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Verified Diploma Extraction
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Proximity & Distance Engine
-                </span>
-              </div>
+            <div className="flex-1 flex items-center gap-3 px-4 py-3 w-full">
+              <MapPin className="w-5 h-5 text-slate-400 shrink-0" />
+              <input 
+                type="text" 
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="City, province, or radius..." 
+                className="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 text-sm md:text-base font-medium"
+              />
             </div>
 
-            {/* Right Hero Visual */}
-            <div className="lg:col-span-5 relative">
-              <div className="relative mx-auto max-w-md">
-                <div className="rounded-3xl border border-mint-200 bg-white p-6 shadow-card hover:shadow-card-hover transition-all space-y-5 relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-mint-500 to-mint-600 flex items-center justify-center text-white font-black text-sm shadow-sm">
-                        WM
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-muted">Platform Matching</span>
-                        <h3 className="text-lg font-bold text-dark">Automated Match Engine</h3>
-                      </div>
-                    </div>
-                    <div className="bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> 92% Match
-                    </div>
-                  </div>
+            <Button 
+              onClick={handleSearch}
+              className="w-full md:w-auto bg-[#1ea87a] hover:bg-[#188f66] text-white rounded-full px-8 py-4 md:py-6 h-auto font-semibold flex items-center justify-center gap-2 transition-colors mt-2 md:mt-0 shrink-0"
+            >
+              Find Match <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Technical Skills (40%)
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Location & Distance (20%)
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Experience (20%)
-                    </span>
-                  </div>
+          {/* Popular Tags */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <span className="text-sm text-emerald-100/60 mr-2 font-medium">Popular:</span>
+            {['Web Developer', 'Data Analyst', 'Registered Nurse', 'Graphic Designer'].map(tag => (
+              <span 
+                key={tag} 
+                onClick={() => setKeyword(tag)}
+                className="text-xs font-semibold bg-emerald-950/40 border border-emerald-500/20 text-emerald-100 px-5 py-2 rounded-full hover:bg-emerald-900/60 cursor-pointer transition-colors backdrop-blur-sm shadow-sm"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
 
-                  <div className="space-y-1.5 text-[11px] text-slate-600 bg-mint-50/50 p-3.5 rounded-xl border border-mint-100">
-                    <p className="font-bold text-mint-900 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-mint-600" /> Multi-factor compatibility:
-                    </p>
-                    <p>• Verified degree & certificates on file</p>
-                    <p>• Proximity calculations in kilometers</p>
-                    <p>• Salary budget alignment</p>
-                  </div>
-
-                  <Link href="/roles">
-                    <Button variant="primary" className="w-full justify-center">
-                      Get Started Free
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+          {/* Stats row */}
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-0 p-6 bg-emerald-950/30 border border-emerald-500/20 backdrop-blur-md rounded-2xl max-w-2xl mx-auto w-full shadow-xl">
+            <div className="flex flex-col items-center justify-center sm:border-r border-emerald-500/20 px-4 py-2">
+              <span className="text-2xl font-bold text-white">2,450+</span>
+              <span className="text-[10px] text-emerald-200/50 mt-1 uppercase tracking-widest font-semibold">Active Jobs</span>
+            </div>
+            <div className="flex flex-col items-center justify-center sm:border-r border-emerald-500/20 px-4 py-2">
+              <span className="text-2xl font-bold text-white">380+</span>
+              <span className="text-[10px] text-emerald-200/50 mt-1 uppercase tracking-widest font-semibold">Companies</span>
+            </div>
+            <div className="flex flex-col items-center justify-center px-4 py-2">
+              <span className="text-2xl font-bold text-white">15K+</span>
+              <span className="text-[10px] text-emerald-200/50 mt-1 uppercase tracking-widest font-semibold">Matches Made</span>
             </div>
           </div>
+
         </div>
       </section>
 
