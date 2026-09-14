@@ -35,29 +35,37 @@ export default function LandingPage() {
       <Navbar />
 
       {/* 1. HERO SECTION */}
-      <section className="relative overflow-hidden pt-12 pb-20 md:py-24 mint-gradient-hero border-b border-border">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-mint-300/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-10 right-10 w-72 h-72 bg-emerald-200/20 rounded-full blur-2xl pointer-events-none" />
+      <section
+        className="relative overflow-hidden pt-12 pb-20 md:py-24 border-b border-border"
+        style={{
+          backgroundImage: 'url(/hero.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Mobile-only blur overlay — softens background on small/Android screens */}
+        <div className="absolute inset-0 block md:hidden backdrop-blur-sm bg-white/30 pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             {/* Left Headline */}
             <div className="lg:col-span-7 space-y-6 text-left">
-              <div className="inline-flex items-center gap-2 bg-white/90 border border-mint-200 px-3.5 py-1.5 rounded-full shadow-soft">
-                <Sparkles className="w-4 h-4 text-mint-600" />
-                <span className="text-xs font-bold text-mint-800 tracking-wide">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 px-3.5 py-1.5 rounded-full shadow-soft">
+                <Sparkles className="w-4 h-4 text-mint-400" />
+                <span className="text-xs font-bold text-black tracking-wide">
                   AI-Powered Skill &amp; Location Matching
                 </span>
               </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-dark tracking-tight leading-[1.1]">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-[1.1]">
                 Find the Right Job. <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-mint-500 to-mint-700">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-mint-400 to-emerald-400">
                   Near You.
                 </span>
               </h1>
 
-              <p className="text-lg text-slate-600 max-w-xl leading-relaxed">
+              <p className="text-lg text-black max-w-xl leading-relaxed">
                 WorkMatch connects your skills, experience, and location with opportunities that fit you. Transparent match scores and verified credentials for genuine career growth.
               </p>
 
@@ -69,74 +77,28 @@ export default function LandingPage() {
                   </Button>
                 </Link>
                 <Link href="/employer/dashboard">
-                  <Button variant="outline" size="lg">
-                    <Briefcase className="w-4 h-4 text-slate-600" /> Hire Talent
+                  <Button variant="outline" size="lg" className="border-slate-700/30 text-black hover:bg-white/10">
+                    <Briefcase className="w-4 h-4 text-black" /> Hire Talent
                   </Button>
                 </Link>
               </div>
 
               {/* Key trust bullets */}
-              <div className="pt-6 border-t border-mint-100 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-600 font-medium">
+              <div className="pt-6 border-t border-white/10 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-700 font-medium">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Transparent 6-Factor AI Scoring
+                  <CheckCircle2 className="w-4 h-4 text-mint-400" /> Transparent 6-Factor AI Scoring
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Verified Diploma Extraction
+                  <CheckCircle2 className="w-4 h-4 text-mint-400" /> Verified Diploma Extraction
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-mint-500" /> Proximity &amp; Distance Engine
+                  <CheckCircle2 className="w-4 h-4 text-mint-400" /> Proximity &amp; Distance Engine
                 </span>
               </div>
             </div>
 
             {/* Right Hero Visual */}
-            <div className="lg:col-span-5 relative">
-              <div className="relative mx-auto max-w-md">
-                <div className="rounded-3xl border border-mint-200 bg-white p-6 shadow-card hover:shadow-card-hover transition-all space-y-5 relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-mint-500 to-mint-600 flex items-center justify-center text-white font-black text-sm shadow-sm">
-                        WM
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-muted">Platform Matching</span>
-                        <h3 className="text-lg font-bold text-dark">Automated Match Engine</h3>
-                      </div>
-                    </div>
-                    <div className="bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> 92% Match
-                    </div>
-                  </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Technical Skills (40%)
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Location &amp; Distance (20%)
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-mint-50 text-mint-800 border border-mint-200">
-                      Experience (20%)
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 text-[11px] text-slate-600 bg-mint-50/50 p-3.5 rounded-xl border border-mint-100">
-                    <p className="font-bold text-mint-900 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-mint-600" /> Multi-factor compatibility:
-                    </p>
-                    <p>• Verified degree &amp; certificates on file</p>
-                    <p>• Proximity calculations in kilometers</p>
-                    <p>• Salary budget alignment</p>
-                  </div>
-
-                  <Link href="/roles">
-                    <Button variant="primary" className="w-full justify-center">
-                      Get Started Free
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
