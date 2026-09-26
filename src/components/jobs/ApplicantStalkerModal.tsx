@@ -620,7 +620,7 @@ export function ApplicantStalkerModal({
                           size="sm"
                           className="text-xs font-bold text-mint-700 group-hover:bg-mint-50"
                         >
-                          Stalk <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                          Profile <ChevronRight className="w-3.5 h-3.5 ml-1" />
                         </Button>
                       </div>
                     </div>
