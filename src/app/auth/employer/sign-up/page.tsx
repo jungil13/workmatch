@@ -67,21 +67,34 @@ export default function EmployerSignUpPage() {
       }
 
       if (authData.user) {
-        // 1. Create company record with auto slug
-        const companySlug = formData.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
-        const { data: company, error: compError } = await supabase.from('companies').insert({
-          name: formData.companyName,
-          slug: companySlug,
-          city: formData.city,
-          province: formData.city === 'Cebu City' ? 'Cebu' : 'Metro Manila',
-          industry: 'Software & Technology',
-          verified: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).select().maybeSingle();
+        // 1. Check if company already exists before creating to prevent duplicates
+        let company: any = null;
+        const { data: existingCompany } = await supabase
+          .from('companies')
+          .select('*')
+          .ilike('name', formData.companyName.trim())
+          .limit(1)
+          .maybeSingle();
 
-        if (compError) {
-          console.warn('Company insert warning:', compError);
+        if (existingCompany) {
+          company = existingCompany;
+        } else {
+          const companySlug = formData.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
+          const { data: createdComp, error: compError } = await supabase.from('companies').insert({
+            name: formData.companyName.trim(),
+            slug: companySlug,
+            city: formData.city,
+            province: formData.city === 'Cebu City' ? 'Cebu' : 'Metro Manila',
+            industry: 'Software & Technology',
+            verified: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).select().maybeSingle();
+
+          if (compError) {
+            console.warn('Company insert warning:', compError);
+          }
+          company = createdComp;
         }
 
         // 2. Create user profile

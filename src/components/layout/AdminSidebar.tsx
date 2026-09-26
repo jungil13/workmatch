@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 import {
   ShieldAlert,
   Users,
@@ -77,13 +78,17 @@ export function AdminSidebar() {
       </div>
 
       <div className="pt-4 border-t border-slate-800 space-y-2">
-        <Link
-          href="/roles"
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-error hover:bg-slate-800 transition-colors"
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/';
+          }}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          Exit Admin Mode
-        </Link>
+          Sign Out
+        </button>
       </div>
     </aside>
   );

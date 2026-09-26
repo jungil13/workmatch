@@ -6,17 +6,36 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { supabase } from '@/lib/supabase/client';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      setSubmitted(true);
+    if (!email) return;
+
+    setIsLoading(true);
+    setError('');
+
+    const redirectTo = `${window.location.origin}/auth/callback?next=/auth/reset-password`;
+
+    const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+
+    setIsLoading(false);
+
+    if (authError) {
+      setError(authError.message);
+      return;
     }
+
+    setSubmitted(true);
   };
 
   return (
@@ -33,6 +52,12 @@ export default function ForgotPasswordPage() {
               Enter your verified email and we'll send you instructions to reset your password.
             </p>
           </div>
+
+          {error && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium">
+              {error}
+            </div>
+          )}
 
           {submitted ? (
             <div className="bg-mint-50 border border-mint-200 p-4 rounded-2xl text-center space-y-3">
@@ -59,7 +84,7 @@ export default function ForgotPasswordPage() {
                 required
               />
 
-              <Button type="submit" variant="primary" size="lg" className="w-full justify-center shadow-md">
+              <Button type="submit" variant="primary" size="lg" className="w-full justify-center shadow-md" isLoading={isLoading}>
                 Send Reset Link
               </Button>
             </form>

@@ -155,7 +155,7 @@ export function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5">
-                  <Link href="/roles">
+                  <Link href="/auth/sign-in">
                     <Button variant="ghost" size="sm">
                       Sign In
                     </Button>

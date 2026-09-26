@@ -13,18 +13,79 @@ import { Building2, Search, MapPin, ShieldCheck, Star, Briefcase, ArrowRight } f
 export default function CompaniesPage() {
   const [search, setSearch] = useState('');
   const [industry, setIndustry] = useState('All Industries');
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('companies').select('*').order('name').then(({ data }) => {
-      setCompanies((data ?? []) as Company[]);
+    async function loadCompanies() {
+      setLoading(true);
+      const [compRes, jobsRes] = await Promise.all([
+        supabase.from('companies').select('*').order('name'),
+        supabase.from('jobs').select('id, company_id').eq('status', 'published'),
+      ]);
+
+      const rawCompanies = compRes.data ?? [];
+      const publishedJobs = jobsRes.data ?? [];
+
+      // Calculate job counts by company_id
+      const jobCountMap: Record<string, number> = {};
+      publishedJobs.forEach((job: any) => {
+        if (job.company_id) {
+          jobCountMap[job.company_id] = (jobCountMap[job.company_id] || 0) + 1;
+        }
+      });
+
+      // Deduplicate companies by normalized name
+      // Prioritize: 1) has active published jobs, 2) is verified, 3) has logo/description
+      const groupedByName: Record<string, any[]> = {};
+      rawCompanies.forEach((c: any) => {
+        const key = c.name ? c.name.trim().toLowerCase() : c.id;
+        if (!groupedByName[key]) groupedByName[key] = [];
+        groupedByName[key].push({
+          ...c,
+          activeJobsCount: jobCountMap[c.id] || 0,
+        });
+      });
+
+      const deduplicated: any[] = [];
+      Object.values(groupedByName).forEach((group) => {
+        if (group.length === 1) {
+          deduplicated.push(group[0]);
+        } else {
+          // Sort duplicates: most active jobs first, then verified, then has logo
+          group.sort((a, b) => {
+            if (b.activeJobsCount !== a.activeJobsCount) {
+              return b.activeJobsCount - a.activeJobsCount;
+            }
+            if (b.verified !== a.verified) {
+              return b.verified ? 1 : -1;
+            }
+            const aScore = (a.logo_url ? 2 : 0) + (a.description ? 1 : 0);
+            const bScore = (b.logo_url ? 2 : 0) + (b.description ? 1 : 0);
+            return bScore - aScore;
+          });
+
+          // Aggregate total jobs across duplicates if any jobs were split
+          const totalJobs = group.reduce((sum, item) => sum + item.activeJobsCount, 0);
+          const primaryCompany = { ...group[0], activeJobsCount: totalJobs };
+          deduplicated.push(primaryCompany);
+        }
+      });
+
+      // Sort alphabetically by company name
+      deduplicated.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+      setCompanies(deduplicated);
       setLoading(false);
-    });
+    }
+
+    loadCompanies();
   }, []);
 
   const filtered = companies.filter((c) => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) || (c.city && c.city.toLowerCase().includes(search.toLowerCase()));
+    const matchSearch =
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      (c.city && c.city.toLowerCase().includes(search.toLowerCase()));
     const matchIndustry = industry === 'All Industries' || c.industry === industry;
     return matchSearch && matchIndustry;
   });
@@ -122,6 +183,15 @@ export default function CompaniesPage() {
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-mint-500" /> {company.city}
                     </span>
+                    {company.activeJobsCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <Briefcase className="w-3 h-3 text-emerald-600" /> {company.activeJobsCount} Active {company.activeJobsCount === 1 ? 'Job' : 'Jobs'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">
+                        0 Active Jobs
+                      </span>
+                    )}
                   </div>
                 </div>
 

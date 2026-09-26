@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import {
   LayoutDashboard,
@@ -118,13 +118,17 @@ export function EmployerSidebar() {
       </div>
 
       <div className="pt-4 border-t border-border space-y-2">
-        <Link
-          href="/roles"
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-error hover:bg-red-50 transition-colors"
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/';
+          }}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          Switch Role / Sign Out
-        </Link>
+          Sign Out
+        </button>
       </div>
     </aside>
   );

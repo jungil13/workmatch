@@ -64,6 +64,23 @@ export function DashboardLayout({
       const fallbackName = meta?.first_name || meta?.full_name?.split(' ')[0] || user.email?.split('@')[0] || 'User';
       const fallbackLastName = meta?.last_name || meta?.full_name?.split(' ').slice(1).join(' ') || '';
       const fallbackAvatar = meta?.avatar_url || meta?.picture || null;
+
+      // Role security check: prevent portal mismatch (e.g. employer on seeker portal or vice versa)
+      if (profile?.role) {
+        if (profile.role === 'employer' && portal === 'seeker') {
+          router.replace('/employer/dashboard');
+          return;
+        }
+        if (profile.role === 'job_seeker' && portal === 'employer') {
+          router.replace('/seeker/dashboard');
+          return;
+        }
+        if (profile.role !== 'admin' && portal === 'admin') {
+          router.replace(profile.role === 'employer' ? '/employer/dashboard' : '/seeker/dashboard');
+          return;
+        }
+      }
+
       setUserProfile(
         profile
           ? { ...profile, avatar_url: profile.avatar_url || fallbackAvatar }

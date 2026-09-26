@@ -77,7 +77,24 @@ export default function CreateJobPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return;
+      if (!user) {
+        router.replace('/auth/sign-in');
+        return;
+      }
+
+      // Check role - Job seekers are strictly forbidden from posting jobs
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile?.role !== 'employer' && profile?.role !== 'admin') {
+        alert('Access Restricted: Job seekers cannot post jobs. Please register or sign in as an Employer to create job postings.');
+        router.replace('/seeker/dashboard');
+        return;
+      }
+
       setEmployerId(user.id);
 
       const { data: ep } = await supabase

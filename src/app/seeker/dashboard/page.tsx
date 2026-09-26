@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Progress } from '@/components/ui/Progress';
@@ -24,9 +25,12 @@ import {
   MapPin,
   Building2,
   TrendingUp,
+  Search,
 } from 'lucide-react';
 
 export default function SeekerDashboardPage() {
+  const router = useRouter();
+  const [dashboardSearch, setDashboardSearch] = useState('');
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [seekerProfile, setSeekerProfile] = useState<any>(null);
@@ -117,20 +121,90 @@ export default function SeekerDashboardPage() {
     );
   }
 
+  const handleQuickSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (dashboardSearch.trim()) {
+      router.push(`/seeker/find-jobs?keyword=${encodeURIComponent(dashboardSearch.trim())}`);
+    } else {
+      router.push('/seeker/find-jobs');
+    }
+  };
+
   return (
     <DashboardLayout
       portal="seeker"
       title={`Welcome back, ${profile?.first_name || 'there'} 👋`}
       subtitle="Track your applications progress and explore your top AI career recommendations."
       actions={
-        <Link href="/seeker/scanner">
-          <Button variant="primary" size="sm" className="shadow-sm">
-            <Sparkles className="w-4 h-4" /> AI Recommendations Hub
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/seeker/find-jobs">
+            <Button variant="primary" size="sm" className="shadow-sm">
+              <Search className="w-4 h-4" /> Find Jobs
+            </Button>
+          </Link>
+          <Link href="/seeker/scanner">
+            <Button variant="outline" size="sm">
+              <Sparkles className="w-4 h-4" /> AI Recommendations
+            </Button>
+          </Link>
+        </div>
       }
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Dedicated Find Jobs Hero Search Section */}
+        <div className="bg-gradient-to-br from-mint-500/10 via-mint-50/40 to-white rounded-3xl border border-mint-200/80 p-6 sm:p-7 shadow-soft space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-mint-50 border border-mint-200 px-3 py-0.5 rounded-full text-[11px] font-bold text-mint-800 mb-1">
+                <Search className="w-3 h-3 text-mint-600" /> Find Jobs Section
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-dark tracking-tight">
+                Search Open Tech & Professional Roles
+              </h2>
+              <p className="text-xs text-muted">
+                Explore real-time vacancies matched to your skills, education, and commute distance.
+              </p>
+            </div>
+
+            <Link href="/seeker/find-jobs">
+              <Button variant="outline" size="sm" className="font-bold border-mint-200 hover:bg-mint-50 text-xs">
+                Browse All Openings <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </Link>
+          </div>
+
+          {/* Search Input Bar */}
+          <form onSubmit={handleQuickSearch} className="flex flex-col sm:flex-row items-center gap-2.5">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 text-mint-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search job title, skills (e.g. React, Node.js), or keywords..."
+                value={dashboardSearch}
+                onChange={(e) => setDashboardSearch(e.target.value)}
+                className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-white text-xs text-dark placeholder:text-slate-400 focus:border-mint-500 focus:outline-none shadow-xs"
+              />
+            </div>
+            <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto font-bold justify-center shadow-xs">
+              <Search className="w-4 h-4" /> Find Jobs
+            </Button>
+          </form>
+
+          {/* Quick Filter Tags */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Popular:</span>
+            {['Frontend', 'React', 'Full Stack', 'Node.js', 'Remote', 'Cebu City', 'UI/UX'].map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => router.push(`/seeker/find-jobs?keyword=${encodeURIComponent(tag)}`)}
+                className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white border border-border text-slate-700 hover:border-mint-400 hover:text-mint-700 hover:bg-mint-50 transition-colors shadow-xs"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
         {/* Profile Completeness Card */}
         <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-soft space-y-4">
           <div className="flex items-center justify-between">
@@ -167,24 +241,24 @@ export default function SeekerDashboardPage() {
 
         {/* Top AI Job Recommendations Section */}
         {topRecommendations.length > 0 && (
-          <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-soft space-y-5">
+          <div className="bg-white rounded-3xl border border-border p-5 sm:p-7 shadow-soft space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div>
-                <h3 className="text-base font-bold text-dark flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-mint-600" /> Top AI Job Matches for You
+                <h3 className="text-sm font-bold text-dark flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-mint-600" /> Top AI Job Matches
                 </h3>
-                <p className="text-xs text-muted">Recommended based on your current skills and location.</p>
+                <p className="text-xs text-muted mt-0.5">Based on your skills and location.</p>
               </div>
               <Link href="/seeker/scanner">
-                <Button variant="outline" size="sm">View All Matches <ArrowRight className="w-3.5 h-3.5" /></Button>
+                <Button variant="outline" size="sm" className="text-xs">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {topRecommendations.map((job) => (
                 <div
                   key={job.id}
-                  className="p-5 rounded-2xl border border-border bg-slate-50/50 hover:bg-white hover:border-mint-300 hover:shadow-md transition-all space-y-3 flex flex-col justify-between"
+                  className="p-4 rounded-2xl border border-border bg-slate-50/50 hover:bg-white hover:border-mint-300 hover:shadow-md transition-all space-y-3 flex flex-col justify-between"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -198,7 +272,7 @@ export default function SeekerDashboardPage() {
 
                     <h4
                       onClick={() => setSelectedJobForDetails(job)}
-                      className="text-sm font-bold text-dark hover:text-mint-600 cursor-pointer line-clamp-1"
+                      className="text-sm font-bold text-dark hover:text-mint-600 cursor-pointer line-clamp-2 leading-snug"
                     >
                       {job.title}
                     </h4>
@@ -237,18 +311,18 @@ export default function SeekerDashboardPage() {
         )}
 
         {/* Recent Applications */}
-        <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-soft space-y-5">
+        <div className="bg-white rounded-3xl border border-border p-5 sm:p-7 shadow-soft space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-border">
-            <h3 className="text-base font-bold text-dark">Recent Applications</h3>
+            <h3 className="text-sm font-bold text-dark">Recent Applications</h3>
             <Link href="/seeker/applications">
-              <Button variant="outline" size="sm">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
+              <Button variant="outline" size="sm" className="text-xs">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
             </Link>
           </div>
 
           {applications.length === 0 ? (
             <div className="text-center py-8 space-y-3">
               <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-xs text-muted">You haven't applied to any jobs yet.</p>
+              <p className="text-xs text-muted">You haven&apos;t applied to any jobs yet.</p>
               <Link href="/seeker/find-jobs">
                 <Button variant="primary" size="sm">
                   <Sparkles className="w-4 h-4" /> Explore Jobs
@@ -256,14 +330,19 @@ export default function SeekerDashboardPage() {
               </Link>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {applications.map((app: any, idx: number) => (
-                <div key={app.id || idx} className="flex items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div>
-                    <h4 className="text-sm font-bold text-dark">{app.job?.title}</h4>
-                    <p className="text-xs text-muted">{app.job?.company?.name} • {app.job?.city || 'Remote'}</p>
+                <div key={app.id || idx} className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-slate-200 transition-colors">
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-dark truncate">{app.job?.title}</h4>
+                    <p className="text-[11px] text-muted truncate">{app.job?.company?.name} • {app.job?.city || 'Remote'}</p>
                   </div>
-                  <span className="text-xs font-bold capitalize text-mint-800 bg-mint-50 px-2.5 py-1 rounded-full border border-mint-200 shrink-0">
+                  <span className={`text-[11px] font-bold capitalize px-2.5 py-1 rounded-full border shrink-0 ${
+                    app.status === 'accepted' ? 'text-emerald-800 bg-emerald-50 border-emerald-200' :
+                    app.status === 'rejected' ? 'text-rose-700 bg-rose-50 border-rose-200' :
+                    app.status === 'interview' ? 'text-indigo-800 bg-indigo-50 border-indigo-200' :
+                    'text-mint-800 bg-mint-50 border-mint-200'
+                  }`}>
                     {app.status}
                   </span>
                 </div>

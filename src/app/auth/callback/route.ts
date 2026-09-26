@@ -36,6 +36,16 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
+      // --- PASSWORD RECOVERY: redirect straight to the set-new-password page ---
+      if (data.session?.user?.aud === 'authenticated' && (data.session as any)?.amr?.some?.((a: any) => a.method === 'recovery')) {
+        return NextResponse.redirect(`${baseUrl}/auth/reset-password`);
+      }
+
+      // Support explicit ?next= override (e.g. from forgot-password flow)
+      if (next && next !== '/seeker/dashboard') {
+        return NextResponse.redirect(`${baseUrl}${next}`);
+      }
+
       // Ensure the user has a profiles row (for first-time Google sign-in)
       const { data: existingProfile } = await supabase
         .from('profiles')

@@ -29,22 +29,61 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Protect seeker routes
-  if (pathname.startsWith('/seeker') && !user) {
-    return NextResponse.redirect(new URL('/auth/seeker/sign-in', request.url));
+  if (pathname.startsWith('/seeker')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/auth/sign-in', request.url));
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.role === 'employer') {
+      return NextResponse.redirect(new URL('/employer/dashboard', request.url));
+    }
+    if (profile?.role === 'admin') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
   }
 
-  // Protect employer routes
-  if (pathname.startsWith('/employer') && !user) {
-    return NextResponse.redirect(new URL('/auth/employer/sign-in', request.url));
+  // Protect employer routes (Strict: Job seekers cannot access employer dashboard or post jobs)
+  if (pathname.startsWith('/employer')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/auth/sign-in', request.url));
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.role === 'job_seeker' || (!profile?.role && profile?.role !== 'admin' && profile?.role !== 'employer')) {
+      return NextResponse.redirect(new URL('/seeker/dashboard', request.url));
+    }
   }
 
   // Protect admin routes
-  if (pathname.startsWith('/admin') && !user) {
-    return NextResponse.redirect(new URL('/auth/admin/sign-in', request.url));
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/auth/sign-in', request.url));
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.role !== 'admin') {
+      if (profile?.role === 'employer') {
+        return NextResponse.redirect(new URL('/employer/dashboard', request.url));
+      }
+      return NextResponse.redirect(new URL('/seeker/dashboard', request.url));
+    }
   }
 
-  // If signed-in user visits auth pages, redirect to their portal
-  if (pathname.startsWith('/auth') && user && !pathname.includes('forgot') && !pathname.includes('reset')) {
+  // If signed-in user visits auth pages, redirect to their role portal
+  if (pathname.startsWith('/auth') && user && !pathname.includes('forgot') && !pathname.includes('reset') && !pathname.includes('callback')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')

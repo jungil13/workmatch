@@ -68,7 +68,7 @@ export default function RoleSelectionPage() {
               </Link>
               <div className="text-center">
                 <Link
-                  href="/auth/seeker/sign-in"
+                  href="/auth/sign-in"
                   className="text-xs text-muted hover:text-dark font-medium"
                 >
                   Already have an account? <span className="text-mint-700 font-bold underline">Sign In</span>
@@ -118,23 +118,23 @@ export default function RoleSelectionPage() {
               </Link>
               <div className="text-center">
                 <Link
-                  href="/auth/employer/sign-in"
+                  href="/auth/sign-in"
                   className="text-xs text-muted hover:text-dark font-medium"
                 >
-                  Employer login? <span className="text-dark font-bold underline">Sign In</span>
+                  Already have an account? <span className="text-dark font-bold underline">Sign In</span>
                 </Link>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Admin Quick Entry */}
+        {/* Universal Sign In Quick Entry */}
         <div className="mt-12 text-center">
           <Link
-            href="/admin"
+            href="/auth/sign-in"
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-dark bg-white px-4 py-2 rounded-xl border border-border shadow-soft transition-colors"
           >
-            <Shield className="w-4 h-4 text-mint-600" /> Platform Admin Command Center
+            <Shield className="w-4 h-4 text-mint-600" /> Platform Account Sign In (Job Seeker / Employer / Admin)
           </Link>
         </div>
       </main>

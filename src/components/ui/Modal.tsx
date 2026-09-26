@@ -65,9 +65,10 @@ export function Modal({
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-slate-100 hover:text-dark transition-colors"
+          aria-label="Close modal"
+          className="absolute right-4 top-4 z-30 rounded-full p-2 text-slate-400 hover:text-dark hover:bg-slate-100 bg-white/90 backdrop-blur-xs border border-slate-200/60 shadow-xs transition-all"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         {title && (

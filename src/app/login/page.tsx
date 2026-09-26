@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
-export default function SeekerSignInRedirectPage() {
+export default function LoginPage() {
   redirect('/auth/sign-in');
 }

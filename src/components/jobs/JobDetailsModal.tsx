@@ -53,9 +53,9 @@ export function JobDetailsModal({
       className="max-w-3xl"
     >
       <div className="space-y-6 -mt-3">
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-border">
-          <div className="flex items-start gap-4">
+        {/* Top Header — padded right so it never overlaps the modal X close button */}
+        <div className="flex flex-col gap-3 pb-4 border-b border-border pr-10">
+          <div className="flex items-start gap-4 min-w-0">
             <div className="w-14 h-14 rounded-2xl border border-border bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
               {job.company?.logo_url ? (
                 <img
@@ -67,7 +67,7 @@ export function JobDetailsModal({
                 <Building2 className="w-7 h-7 text-slate-400" />
               )}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <Link
                 href={`/companies/${job.company_id}`}
                 className="text-xs font-bold text-mint-700 hover:underline flex items-center gap-1"
@@ -80,7 +80,7 @@ export function JobDetailsModal({
               <h2 className="text-xl sm:text-2xl font-black text-dark tracking-tight mt-0.5">
                 {job.title}
               </h2>
-              <p className="text-xs text-muted flex items-center gap-2 mt-1">
+              <p className="text-xs text-muted flex items-center gap-2 mt-1 flex-wrap">
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-mint-500" /> {job.city || 'Remote'}
                 </span>
@@ -92,28 +92,12 @@ export function JobDetailsModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
-            {job.match && (
+          {/* Match score shown inline below title — no conflict with close X */}
+          {job.match && (
+            <div className="pl-18">
               <MatchScoreGauge score={job.match.overallScore} size="md" />
-            )}
-            {onToggleSave && (
-              <button
-                onClick={() => onToggleSave(job.id)}
-                className={`p-2.5 rounded-xl border transition-colors ${
-                  isSaved
-                    ? 'bg-mint-50 border-mint-200 text-mint-600'
-                    : 'border-border text-slate-400 hover:text-dark hover:bg-slate-50'
-                }`}
-                title={isSaved ? 'Remove from Saved' : 'Save Job'}
-              >
-                {isSaved ? (
-                  <BookmarkCheck className="w-5 h-5 text-mint-600" />
-                ) : (
-                  <Bookmark className="w-5 h-5" />
-                )}
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Highlight Stats Strip */}
@@ -233,13 +217,33 @@ export function JobDetailsModal({
           </div>
         )}
 
-        {/* Footer Actions */}
+        {/* Footer Actions — Save button placed here so it never conflicts with the modal X close button */}
         <div className="pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
           <Link href={`/jobs/${job.id}`} className="text-xs font-semibold text-muted hover:text-dark flex items-center gap-1">
             Open dedicated page <ExternalLink className="w-3.5 h-3.5" />
           </Link>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* Save/Bookmark button — safely placed in the footer row */}
+            {onToggleSave && (
+              <button
+                type="button"
+                onClick={() => onToggleSave(job.id)}
+                className={`p-2.5 rounded-xl border transition-all flex items-center justify-center shrink-0 ${
+                  isSaved
+                    ? 'bg-mint-50 border-mint-200 text-mint-600 shadow-xs'
+                    : 'border-border text-slate-400 hover:text-dark hover:bg-slate-50'
+                }`}
+                title={isSaved ? 'Remove from Saved' : 'Save Job'}
+                aria-label={isSaved ? 'Remove from Saved' : 'Save Job'}
+              >
+                {isSaved ? (
+                  <BookmarkCheck className="w-4 h-4 text-mint-600" />
+                ) : (
+                  <Bookmark className="w-4 h-4" />
+                )}
+              </button>
+            )}
             <Button variant="outline" size="sm" onClick={onClose} className="w-full sm:w-auto">
               Close
             </Button>

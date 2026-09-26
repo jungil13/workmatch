@@ -124,7 +124,11 @@ export function SeekerSidebar() {
               )}
             </h4>
             <p className="text-[11px] text-mint-700 font-medium truncate flex items-center gap-1">
-              {isVerified ? (
+              {profile?.role === 'employer' ? (
+                <>
+                  <User className="w-3 h-3 text-mint-600 shrink-0" /> Employer
+                </>
+              ) : isVerified ? (
                 <>
                   <ShieldCheck className="w-3 h-3 text-mint-600 shrink-0" /> Verified Candidate
                 </>
@@ -166,13 +170,17 @@ export function SeekerSidebar() {
       </div>
 
       <div className="pt-4 border-t border-border space-y-2">
-        <Link
-          href="/roles"
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/';
+          }}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          Switch Role / Sign Out
-        </Link>
+          Sign Out
+        </button>
       </div>
     </aside>
   );

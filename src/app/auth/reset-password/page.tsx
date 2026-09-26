@@ -1,28 +1,64 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { supabase } from '@/lib/supabase/client';
 import { Lock, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password && password === confirmPassword) {
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/roles');
-      }, 1500);
+    setError('');
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
     }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please try again.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const { data, error: updateError } = await supabase.auth.updateUser({ password });
+
+    setIsLoading(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setSuccess(true);
+
+    // Redirect to the correct portal after a short delay
+    setTimeout(async () => {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user!.id)
+        .maybeSingle();
+
+      if (profileData?.role === 'admin') {
+        window.location.href = '/admin';
+      } else if (profileData?.role === 'employer') {
+        window.location.href = '/employer/dashboard';
+      } else {
+        window.location.href = '/seeker/dashboard';
+      }
+    }, 1800);
   };
 
   return (
@@ -40,11 +76,17 @@ export default function ResetPasswordPage() {
             </p>
           </div>
 
+          {error && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium">
+              {error}
+            </div>
+          )}
+
           {success ? (
             <div className="bg-mint-50 border border-mint-200 p-4 rounded-2xl text-center space-y-2">
               <CheckCircle2 className="w-8 h-8 text-mint-600 mx-auto" />
               <h3 className="text-sm font-bold text-mint-900">Password Updated!</h3>
-              <p className="text-xs text-mint-700">Redirecting you to sign in...</p>
+              <p className="text-xs text-mint-700">Redirecting you to your dashboard...</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -67,7 +109,13 @@ export default function ResetPasswordPage() {
                 required
               />
 
-              <Button type="submit" variant="primary" size="lg" className="w-full justify-center shadow-md">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                className="w-full justify-center shadow-md"
+                isLoading={isLoading}
+              >
                 Update Password <ArrowRight className="w-4 h-4" />
               </Button>
             </form>
