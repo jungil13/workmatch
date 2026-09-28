@@ -23,6 +23,8 @@ import {
   Clock,
   Briefcase,
   ExternalLink,
+  Flame,
+  Users,
 } from 'lucide-react';
 
 export default function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -238,8 +240,34 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                 </div>
               </div>
 
+              {/* Urgent Hiring Banner */}
+              {(job.is_urgent || job.company?.is_urgent) && (
+                <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-2xl flex items-center justify-between gap-2 text-rose-800 text-xs font-bold shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-rose-600 animate-pulse shrink-0" />
+                    <span>Urgent Hiring Position — Employer is actively recruiting for immediate hire.</span>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-rose-200/80 px-2.5 py-0.5 rounded-full text-rose-900 shrink-0">
+                    🔥 Priority Role
+                  </span>
+                </div>
+              )}
+
               {/* Badges strip */}
               <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pt-4 border-t border-border text-xs text-muted">
+                {(job.is_urgent || job.company?.is_urgent) && (
+                  <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 animate-pulse">
+                    <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                  </span>
+                )}
+
+                <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5 text-violet-500" />
+                  {job.hires_count || 1} {(job.hires_count || 1) === 1 ? 'Hire Opening' : 'Hire Openings'}
+                </span>
+
+                <span className="inline-block w-1 h-1 rounded-full bg-slate-300" />
+
                 <span className="flex items-center gap-1.5 text-slate-800 font-semibold">
                   <MapPin className="w-4 h-4 text-mint-600" />
                   {job.city || 'Remote'}

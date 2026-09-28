@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
 import { Company } from '@/types/database';
-import { Building2, Search, MapPin, ShieldCheck, Star, Briefcase, ArrowRight } from 'lucide-react';
+import { Building2, Search, MapPin, ShieldCheck, Star, Briefcase, ArrowRight, Flame } from 'lucide-react';
 
 export default function CompaniesPage() {
   const [search, setSearch] = useState('');
@@ -161,11 +161,18 @@ export default function CompaniesPage() {
                         <Building2 className="w-6 h-6 text-slate-400" />
                       )}
                     </div>
-                    {company.verified && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-mint-800 bg-mint-50 px-2.5 py-1 rounded-full border border-mint-200">
-                        <ShieldCheck className="w-3.5 h-3.5 text-mint-600" /> Verified
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {company.is_urgent && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200 animate-pulse">
+                          <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                        </span>
+                      )}
+                      {company.verified && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-mint-800 bg-mint-50 px-2.5 py-1 rounded-full border border-mint-200">
+                          <ShieldCheck className="w-3.5 h-3.5 text-mint-600" /> Verified
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div>

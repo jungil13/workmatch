@@ -17,6 +17,7 @@ import {
   Mail,
   Phone,
   MapPin,
+  Flame,
 } from 'lucide-react';
 
 const CITY_PROVINCE_MAP: Record<string, string> = {
@@ -49,6 +50,7 @@ export default function EmployerProfilePage() {
   const [city, setCity] = useState('Cebu City');
   const [province, setProvince] = useState('Cebu');
   const [description, setDescription] = useState('');
+  const [isCompanyUrgent, setIsCompanyUrgent] = useState(false);
 
   // UI State
   const [saved, setSaved] = useState(false);
@@ -103,6 +105,7 @@ export default function EmployerProfilePage() {
           setCity(c.city || 'Cebu City');
           setProvince(c.province || 'Cebu');
           setDescription(c.description || '');
+          setIsCompanyUrgent(Boolean(c.is_urgent));
         }
       }
 
@@ -149,21 +152,30 @@ export default function EmployerProfilePage() {
 
       if (currentCompanyId) {
         // Update existing company
-        const { error: companyError } = await supabase
+        const compPayload: any = {
+          name: companyName || 'My Company',
+          industry,
+          website: website || null,
+          email: companyEmail || null,
+          phone: companyPhone || null,
+          address: address || null,
+          city: city || 'Cebu City',
+          province: province || 'Cebu',
+          description: description || null,
+          is_urgent: isCompanyUrgent,
+          updated_at: new Date().toISOString(),
+        };
+
+        let { error: companyError } = await supabase
           .from('companies')
-          .update({
-            name: companyName || 'My Company',
-            industry,
-            website: website || null,
-            email: companyEmail || null,
-            phone: companyPhone || null,
-            address: address || null,
-            city: city || 'Cebu City',
-            province: province || 'Cebu',
-            description: description || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(compPayload)
           .eq('id', currentCompanyId);
+
+        if (companyError && companyError.message?.includes('is_urgent')) {
+          delete compPayload.is_urgent;
+          const retry = await supabase.from('companies').update(compPayload).eq('id', currentCompanyId);
+          companyError = retry.error;
+        }
 
         if (companyError) {
           console.error('Error updating company:', companyError);
@@ -175,25 +187,35 @@ export default function EmployerProfilePage() {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
 
-        const { data: newComp, error: insertCompError } = await supabase
+        const newCompPayload: any = {
+          name: companyName || 'My Company',
+          slug: compSlug,
+          industry,
+          website: website || null,
+          email: companyEmail || null,
+          phone: companyPhone || null,
+          address: address || null,
+          city: city || 'Cebu City',
+          province: province || 'Cebu',
+          description: description || null,
+          is_urgent: isCompanyUrgent,
+          verified: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        let { data: newComp, error: insertCompError } = await supabase
           .from('companies')
-          .insert({
-            name: companyName || 'My Company',
-            slug: compSlug,
-            industry,
-            website: website || null,
-            email: companyEmail || null,
-            phone: companyPhone || null,
-            address: address || null,
-            city: city || 'Cebu City',
-            province: province || 'Cebu',
-            description: description || null,
-            verified: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .insert(newCompPayload)
           .select()
           .maybeSingle();
+
+        if (insertCompError && insertCompError.message?.includes('is_urgent')) {
+          delete newCompPayload.is_urgent;
+          const retry = await supabase.from('companies').insert(newCompPayload).select().maybeSingle();
+          newComp = retry.data;
+          insertCompError = retry.error;
+        }
 
         if (insertCompError) {
           console.error('Error inserting company:', insertCompError);
@@ -410,6 +432,36 @@ export default function EmployerProfilePage() {
                   placeholder="Describe your company mission, team culture, perks, and vision to attract top candidate talent..."
                   className="w-full rounded-2xl border border-border p-3 text-xs text-dark focus:border-mint-500 focus:outline-none"
                 />
+              </div>
+
+              {/* Company Urgent Hiring Status Box */}
+              <div className={`p-4 rounded-2xl border transition-all ${
+                isCompanyUrgent ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-500/20' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isCompanyUrgent}
+                    onChange={(e) => setIsCompanyUrgent(e.target.checked)}
+                    className="rounded text-rose-600 focus:ring-rose-500 h-5 w-5 mt-0.5"
+                  />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-dark flex items-center gap-1.5">
+                        <Flame className={`w-4 h-4 ${isCompanyUrgent ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
+                        Flag Company as Urgently Hiring
+                      </span>
+                      {isCompanyUrgent && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300 animate-pulse">
+                          🔥 Urgent Hiring Company
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Highlights your entire company profile with an Urgent Hiring badge in the employer directory and alerts job seekers that your team is actively recruiting.
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
 

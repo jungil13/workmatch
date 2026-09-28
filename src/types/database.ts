@@ -70,6 +70,7 @@ export interface Company {
   latitude: number;
   longitude: number;
   verified: boolean;
+  is_urgent?: boolean;
   rating_avg?: number;
   review_count?: number;
   created_at: string;
@@ -181,6 +182,8 @@ export interface Job {
   application_deadline?: string;
   views: number;
   applicant_count?: number;
+  hires_count?: number;
+  is_urgent?: boolean;
   required_skills?: Array<Skill & { is_required: boolean; minimum_proficiency: number }>;
   created_at: string;
   updated_at: string;

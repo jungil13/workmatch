@@ -21,6 +21,8 @@ import {
   Clock,
   Briefcase,
   GraduationCap,
+  Flame,
+  Users,
 } from 'lucide-react';
 
 interface JobDetailsModalProps {
@@ -100,12 +102,32 @@ export function JobDetailsModal({
           )}
         </div>
 
+        {/* Urgent Hiring Banner */}
+        {(job.is_urgent || job.company?.is_urgent) && (
+          <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-2xl flex items-center justify-between gap-2 text-rose-800 text-xs font-bold shadow-sm">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-rose-600 animate-pulse shrink-0" />
+              <span>Urgent Hiring Position — Employer is actively interviewing candidates for immediate hiring.</span>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-rose-200/80 px-2.5 py-0.5 rounded-full text-rose-900 shrink-0">
+              🔥 Priority Role
+            </span>
+          </div>
+        )}
+
         {/* Highlight Stats Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
             <p className="text-[11px] font-semibold text-muted">Monthly Salary</p>
-            <p className="text-xs font-black text-mint-800 mt-0.5">
+            <p className="text-xs font-black text-mint-800 mt-0.5 truncate">
               {formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency)}
+            </p>
+          </div>
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+            <p className="text-[11px] font-semibold text-muted">Openings</p>
+            <p className="text-xs font-bold text-violet-700 mt-0.5 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5 text-violet-500" />
+              {job.hires_count || 1} {(job.hires_count || 1) === 1 ? 'Hire' : 'Hires'}
             </p>
           </div>
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">

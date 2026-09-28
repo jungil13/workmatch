@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -6,7 +6,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
 import { formatSalaryRange } from '@/lib/utils';
-import { Briefcase, PlusCircle, Users, Eye, Calendar, MapPin } from 'lucide-react';
+import { Briefcase, PlusCircle, Users, Eye, Calendar, MapPin, Flame } from 'lucide-react';
 
 export default function EmployerJobsPage() {
   const [tab, setTab] = useState<'published' | 'draft' | 'closed'>('published');
@@ -37,6 +37,14 @@ export default function EmployerJobsPage() {
     const newStatus = currentStatus === 'published' ? 'closed' : 'published';
     await supabase.from('jobs').update({ status: newStatus }).eq('id', jobId);
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
+  };
+
+  const handleToggleUrgent = async (jobId: string, currentUrgent: boolean) => {
+    const nextUrgent = !currentUrgent;
+    const { error } = await supabase.from('jobs').update({ is_urgent: nextUrgent }).eq('id', jobId);
+    if (!error) {
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, is_urgent: nextUrgent } : j));
+    }
   };
 
   return (
@@ -83,8 +91,16 @@ export default function EmployerJobsPage() {
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {job.is_urgent && (
+                        <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 animate-pulse">
+                          <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-full border border-violet-200 flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5 text-violet-600" /> {job.hires_count || 1} {(job.hires_count || 1) === 1 ? 'Opening' : 'Openings'}
+                      </span>
                       <span className="text-xs font-bold text-mint-700 bg-mint-50 px-2.5 py-0.5 rounded-full border border-mint-200">
-                        {job.employment_type} â€¢ {job.work_arrangement}
+                        {job.employment_type} • {job.work_arrangement}
                       </span>
                       <span className="text-xs text-muted flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-mint-500" /> {job.city}
@@ -94,6 +110,16 @@ export default function EmployerJobsPage() {
                     <p className="text-xs font-semibold text-slate-700">{formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleUrgent(job.id, !!job.is_urgent)}
+                      className={job.is_urgent ? 'text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 font-bold' : 'text-slate-600 hover:bg-slate-50 font-semibold'}
+                      title={job.is_urgent ? 'Click to remove Urgent badge' : 'Click to mark as Urgent Hiring'}
+                    >
+                      <Flame className={`w-3.5 h-3.5 ${job.is_urgent ? 'text-rose-600' : 'text-slate-400'}`} />
+                      {job.is_urgent ? 'Urgent (Active)' : 'Set Urgent'}
+                    </Button>
                     <Link href="/employer/applicants">
                       <Button variant="primary" size="sm"><Users className="w-4 h-4" /> View Applicants</Button>
                     </Link>

@@ -21,6 +21,7 @@ import {
   Target,
   Bot,
   Users,
+  Flame,
 } from 'lucide-react';
 
 interface JobCardProps {
@@ -163,6 +164,16 @@ export function JobCard({
 
               {/* Badge Pill Row */}
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {(job.is_urgent || job.company?.is_urgent) && (
+                  <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 animate-pulse">
+                    <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                  </span>
+                )}
+                {job.hires_count && job.hires_count > 0 && (
+                  <span className="text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-full border border-violet-200 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-violet-500" /> {job.hires_count} {job.hires_count === 1 ? 'Opening' : 'Openings'}
+                  </span>
+                )}
                 <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-blue-500" />
                   {job.match?.distanceKm !== undefined ? formatDistance(job.match.distanceKm) : job.city || 'Remote'}

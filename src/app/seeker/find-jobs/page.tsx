@@ -29,6 +29,7 @@ import {
   X,
   Bot,
   Users,
+  Flame,
 } from 'lucide-react';
 
 function FindJobsContent() {
@@ -42,6 +43,7 @@ function FindJobsContent() {
   const [keyword, setKeyword] = useState(initialKeyword);
   const [city, setCity] = useState('');
   const [workArrangement, setWorkArrangement] = useState('');
+  const [urgentOnly, setUrgentOnly] = useState(false);
   const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
   const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
 
@@ -222,51 +224,71 @@ function FindJobsContent() {
             </select>
           </div>
 
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-center gap-1.5 h-11 px-3 rounded-xl bg-mint-50/70 border border-mint-200 text-xs font-bold text-mint-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Filter Active
-            </div>
+          <div className="lg:col-span-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUrgentOnly(!urgentOnly)}
+              className={`w-full h-11 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                urgentOnly
+                  ? 'bg-rose-50 border-rose-300 text-rose-700 ring-2 ring-rose-500/20 shadow-sm'
+                  : 'bg-white border-border text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+              title="Filter for urgent hiring positions"
+            >
+              <Flame className={`w-3.5 h-3.5 ${urgentOnly ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
+              {urgentOnly ? 'Urgent Only' : 'Urgent Hiring'}
+            </button>
           </div>
         </div>
 
         {/* Results Counter */}
-        <div className="flex items-center justify-between text-xs text-muted px-1">
-          <span>
-            Found <strong className="text-dark font-bold">{jobs.length}</strong> available positions
-          </span>
-          <span className="flex items-center gap-1 text-mint-700 font-semibold">
-            <Sparkles className="w-3.5 h-3.5" /> Instant real-time results as you type
-          </span>
-        </div>
+        {(() => {
+          const displayedJobs = urgentOnly
+            ? jobs.filter((j: any) => j.is_urgent || j.company?.is_urgent)
+            : jobs;
 
-        {/* Job Listings Grid */}
-        {loading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : jobs.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3 shadow-soft">
-            <Briefcase className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-dark">No job openings found</h3>
-            <p className="text-xs text-muted max-w-sm mx-auto">
-              Try adjusting your live keywords or clearing location filters.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setKeyword('');
-                setCity('');
-                setWorkArrangement('');
-              }}
-            >
-              Clear Filters
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {jobs.map((job: any) => {
+          return (
+            <>
+              <div className="flex items-center justify-between text-xs text-muted px-1">
+                <span>
+                  Found <strong className="text-dark font-bold">{displayedJobs.length}</strong> available positions
+                  {urgentOnly && <span className="ml-1 text-rose-600 font-bold">(Urgently Hiring only)</span>}
+                </span>
+                <span className="flex items-center gap-1 text-mint-700 font-semibold">
+                  <Sparkles className="w-3.5 h-3.5" /> Instant real-time results as you type
+                </span>
+              </div>
+
+              {/* Job Listings Grid */}
+              {loading ? (
+                <div className="flex items-center justify-center h-40">
+                  <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : displayedJobs.length === 0 ? (
+                <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3 shadow-soft">
+                  <Briefcase className="w-12 h-12 text-slate-300 mx-auto" />
+                  <h3 className="text-base font-bold text-dark">No job openings found</h3>
+                  <p className="text-xs text-muted max-w-sm mx-auto">
+                    {urgentOnly
+                      ? 'No urgent hiring positions match your current filters. Try turning off the Urgent filter.'
+                      : 'Try adjusting your live keywords or clearing location filters.'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setKeyword('');
+                      setCity('');
+                      setWorkArrangement('');
+                      setUrgentOnly(false);
+                    }}
+                  >
+                    Clear All Filters
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {displayedJobs.map((job: any) => {
               const isSaved = savedJobIds.includes(job.id);
               const isApplied = appliedJobIds.includes(job.id);
               const skillsList = job.required_skills || (job as any).job_skills || [];
@@ -336,6 +358,16 @@ function FindJobsContent() {
 
                         {/* Badges Pill Row (Image 1 Sample) */}
                         <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {(job.is_urgent || job.company?.is_urgent) && (
+                            <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 animate-pulse">
+                              <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                            </span>
+                          )}
+                          {job.hires_count && job.hires_count > 0 && (
+                            <span className="text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-full border border-violet-200 flex items-center gap-1">
+                              <Users className="w-3.5 h-3.5 text-violet-600" /> {job.hires_count} {job.hires_count === 1 ? 'Opening' : 'Openings'}
+                            </span>
+                          )}
                           <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-blue-500" />
                             {match?.distanceKm !== undefined ? formatDistance(match.distanceKm) : '2.5 km away'}
@@ -517,6 +549,9 @@ function FindJobsContent() {
             })}
           </div>
         )}
+      </>
+    );
+  })()}
       </div>
 
       {/* View Details Modal */}

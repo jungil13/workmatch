@@ -14,6 +14,7 @@ import {
   Star,
   ArrowLeft,
   CheckCircle2,
+  Flame,
 } from 'lucide-react';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -91,8 +92,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-2xl sm:text-3xl font-black text-dark tracking-tight">{company.name}</h1>
+                  {company.is_urgent && (
+                    <span className="inline-flex items-center gap-1 text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200 animate-pulse">
+                      <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
+                    </span>
+                  )}
                   {company.verified && (
                     <span className="bg-mint-50 text-mint-700 border border-mint-200 p-1 rounded-full" title="Verified SEC">
                       <ShieldCheck className="w-4 h-4 text-mint-600" />

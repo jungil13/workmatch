@@ -19,8 +19,10 @@ import {
   Clock,
   Sparkles,
   FileCheck,
+  FileText,
 } from 'lucide-react';
 import { formatSalaryRange } from '@/lib/utils';
+import { ResumeGeneratorModal } from '@/components/seeker/ResumeGeneratorModal';
 
 export default function SeekerProfilePage() {
   const [profile, setProfile] = useState<any>(null);
@@ -30,6 +32,7 @@ export default function SeekerProfilePage() {
   const [experiences, setExperiences] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -105,11 +108,21 @@ export default function SeekerProfilePage() {
       title="My Profile"
       subtitle="Your verified professional profile visible to employers."
       actions={
-        <Link href="/seeker/profile/edit">
-          <Button variant="primary" size="sm" className="shadow-sm">
-            <Edit2 className="w-4 h-4" /> Edit Profile
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsResumeModalOpen(true)}
+            className="shadow-sm border-mint-300 text-mint-800 hover:bg-mint-50 flex items-center gap-1.5"
+          >
+            <FileText className="w-4 h-4 text-mint-600" /> Generate Resume
           </Button>
-        </Link>
+          <Link href="/seeker/profile/edit">
+            <Button variant="primary" size="sm" className="shadow-sm">
+              <Edit2 className="w-4 h-4" /> Edit Profile
+            </Button>
+          </Link>
+        </div>
       }
     >
       <div className="max-w-4xl space-y-6">
@@ -333,6 +346,26 @@ export default function SeekerProfilePage() {
           )}
         </div>
       </div>
+
+      <ResumeGeneratorModal
+        isOpen={isResumeModalOpen}
+        onClose={() => setIsResumeModalOpen(false)}
+        profile={profile}
+        seekerProfile={seekerProfile}
+        skills={skills}
+        educations={educations}
+        experiences={experiences}
+        documents={documents}
+        onDocumentSaved={() => {
+          supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) {
+              supabase.from('documents').select('*').eq('user_id', user.id).then(({ data }) => {
+                setDocuments(data ?? []);
+              });
+            }
+          });
+        }}
+      />
     </DashboardLayout>
   );
 }

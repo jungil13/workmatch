@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase/client';
-import { ArrowLeft, CheckCircle2, AlertCircle, Search, X, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertCircle, Search, X, ChevronDown, Check, Flame, Users } from 'lucide-react';
 
 const CITY_COORDS: Record<string, { lat: number; lng: number; province: string }> = {
   'Cebu City': { lat: 10.3157, lng: 123.8854, province: 'Cebu' },
@@ -74,6 +74,8 @@ export default function CreateJobPage() {
   const [city, setCity] = useState('Cebu City');
   const [province, setProvince] = useState('Cebu');
   const [deadline, setDeadline] = useState('');
+  const [hiresCount, setHiresCount] = useState('1');
+  const [isUrgent, setIsUrgent] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -200,7 +202,7 @@ export default function CreateJobPage() {
     const coords = CITY_COORDS[city] || { lat: 10.3157, lng: 123.8854, province: 'Cebu' };
     const jobSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-6);
 
-    const { data: job, error } = await supabase.from('jobs').insert({
+    const jobPayload: any = {
       company_id: companyId,
       employer_id: employerId,
       title,
@@ -220,10 +222,23 @@ export default function CreateJobPage() {
       longitude: coords.lng,
       status,
       application_deadline: deadline ? deadline : null,
+      hires_count: Math.max(1, parseInt(hiresCount) || 1),
+      is_urgent: Boolean(isUrgent),
       views: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).select().maybeSingle();
+    };
+
+    let { data: job, error } = await supabase.from('jobs').insert(jobPayload).select().maybeSingle();
+
+    if (error && (error.message?.includes('hires_count') || error.message?.includes('is_urgent'))) {
+      const fallbackPayload = { ...jobPayload };
+      delete fallbackPayload.hires_count;
+      delete fallbackPayload.is_urgent;
+      const retryRes = await supabase.from('jobs').insert(fallbackPayload).select().maybeSingle();
+      job = retryRes.data;
+      error = retryRes.error;
+    }
 
     if (error) {
       console.error('Job creation error:', error);
@@ -323,13 +338,59 @@ export default function CreateJobPage() {
             </div>
           </div>
 
-          {/* 2. Compensation & Timeline */}
+          {/* 2. Compensation, Capacity & Urgency */}
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-dark border-b border-border pb-2">2. Compensation & Timeline</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <h3 className="text-sm font-bold text-dark border-b border-border pb-2">2. Compensation, Capacity & Hiring Urgency</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input label="Min Monthly Salary (PHP) *" type="number" placeholder="40000" value={salaryMin} onChange={e => setSalaryMin(e.target.value)} required />
               <Input label="Max Monthly Salary (PHP) *" type="number" placeholder="65000" value={salaryMax} onChange={e => setSalaryMax(e.target.value)} required />
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">How Many to Hire (Openings) *</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={hiresCount}
+                    onChange={e => setHiresCount(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-border bg-white pl-9 pr-3 text-sm text-dark focus:border-mint-500 focus:outline-none focus:ring-2 focus:ring-mint-500/20 font-bold"
+                    placeholder="1"
+                    required
+                  />
+                  <Users className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                </div>
+              </div>
               <Input label="Application Deadline" type="date" value={deadline} onChange={e => setDeadline(e.target.value)} />
+            </div>
+
+            {/* Urgent Hiring Toggle Box */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              isUrgent ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-500/20' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isUrgent}
+                  onChange={e => setIsUrgent(e.target.checked)}
+                  className="rounded text-rose-600 focus:ring-rose-500 h-5 w-5 mt-0.5"
+                />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-dark flex items-center gap-1.5">
+                      <Flame className={`w-4 h-4 ${isUrgent ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
+                      Mark Position as Urgent Hiring
+                    </span>
+                    {isUrgent && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300 animate-pulse">
+                        🔥 Urgent Badge Enabled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Prioritizes this job posting with an eye-catching "Urgent Hiring" badge across the job seeker search feed, recommended jobs, and email alerts to fill positions faster.
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 
