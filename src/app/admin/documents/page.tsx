@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { supabase } from '@/lib/supabase/client';
+import { sendNotification } from '@/lib/notifications';
 import { VerificationStatus } from '@/types/database';
 import {
   GraduationCap,
@@ -75,6 +76,19 @@ export default function AdminDocumentsQueuePage() {
         verified_at: new Date().toISOString(),
       })
       .eq('id', selectedDoc.id);
+
+    // Notify applicant about verification result
+    if (selectedDoc.user_id) {
+      await sendNotification({
+        userId: selectedDoc.user_id,
+        type: statusAction === 'verified' ? 'verified' : 'document',
+        title: statusAction === 'verified' ? 'Diploma Verified!' : 'Diploma Verification Update',
+        message: statusAction === 'verified'
+          ? 'Congratulations! Your college degree has been approved and verified by admin. You now have the Verified Candidate badge.'
+          : `Your diploma verification was rejected. Reason: ${reviewNotes || 'Please upload a clear scan.'}`,
+        link: '/seeker/diploma',
+      });
+    }
 
     await supabase.from('audit_logs').insert({
       action: `Admin verified document as ${statusAction}`,
@@ -222,24 +236,36 @@ export default function AdminDocumentsQueuePage() {
                     )}
                   </div>
 
-                  {/* Actions */}
+                  {/* Actions / Verified Status Banner */}
                   <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleOpenReview(doc, 'verified')}
-                      className="flex-1 text-xs font-bold justify-center"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Approve Degree
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenReview(doc, 'rejected')}
-                      className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
-                    >
-                      <X className="w-3.5 h-3.5" /> Reject
-                    </Button>
+                    {doc.verification_status === 'verified' ? (
+                      <div className="w-full py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                        <CheckCircle2 className="w-4 h-4 text-[#00b074]" /> Approved &amp; Verified
+                      </div>
+                    ) : doc.verification_status === 'rejected' ? (
+                      <div className="w-full py-2 px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                        <X className="w-4 h-4 text-rose-600" /> Rejected
+                      </div>
+                    ) : (
+                      <>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'verified')}
+                          className="flex-1 text-xs font-bold justify-center"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Approve Degree
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'rejected')}
+                          className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+                        >
+                          <X className="w-3.5 h-3.5" /> Reject
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               );

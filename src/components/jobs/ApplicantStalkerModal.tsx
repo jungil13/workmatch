@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
+import { trackJobInteraction } from '@/lib/services/jobTrackingService';
 import {
   Users,
   Eye,
@@ -70,7 +71,8 @@ export function ApplicantStalkerModal({
       setLoading(true);
 
       try {
-        // Record current user view for this job in localStorage to track visits
+        // Record current user view for this job in localStorage and database
+        trackJobInteraction(job.id, { userId: currentUserId, source: 'stalker_view' });
         if (currentUserId) {
           const viewedKey = `viewed_job_${job.id}`;
           const currentViews = JSON.parse(localStorage.getItem(viewedKey) || '[]');
@@ -282,7 +284,7 @@ export function ApplicantStalkerModal({
 
   const currentUserRank = candidates.findIndex((c) => c.isCurrentUser || c.id === currentUserId) + 1;
   const totalApplicantsCount = candidates.filter((c) => c.type === 'applied').length;
-  const totalVisitorsCount = candidates.length;
+  const totalVisitorsCount = Math.max(job?.views || 0, candidates.length, totalApplicantsCount);
 
   return (
     <Modal
@@ -291,7 +293,7 @@ export function ApplicantStalkerModal({
         setSelectedCandidate(null);
         onClose();
       }}
-      maxWidth="xl"
+      maxWidth="3xl"
       title=""
     >
       <div className="space-y-6 -mt-2">
@@ -308,22 +310,11 @@ export function ApplicantStalkerModal({
               Inspect candidates who visited or submitted applications for {job?.company?.name || 'this company'}.
             </p>
           </div>
-
-          {/* Quick Rank Badge */}
-          <div className="bg-slate-900 text-white p-3 rounded-2xl shrink-0 text-center shadow-md">
-            <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-mint-400">
-              <Award className="w-3.5 h-3.5" /> Your Estimated Match Rank
-            </div>
-            <div className="text-2xl font-black tracking-tight text-white mt-0.5">
-              #{currentUserRank > 0 ? currentUserRank : 1}
-              <span className="text-xs font-normal text-slate-400 ml-1">of {totalVisitorsCount}</span>
-            </div>
-          </div>
         </div>
-
-        {/* Selected Candidate Detailed View (Stalker Inspector View) */}
+        {/* Selected Candidate Detailed View — Full Profile Style */}
         {selectedCandidate ? (
-          <div className="space-y-5 animate-slide-up">
+          <div className="space-y-4 animate-slide-up">
+            {/* Back button */}
             <button
               onClick={() => setSelectedCandidate(null)}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-mint-700 hover:text-mint-800 bg-mint-50 px-3 py-1.5 rounded-xl border border-mint-200 transition-colors"
@@ -331,11 +322,12 @@ export function ApplicantStalkerModal({
               <ArrowLeft className="w-3.5 h-3.5" /> Back to Competitor Rankings
             </button>
 
-            <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-6">
-              {/* Profile Top Banner */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-mint-500 text-white font-black text-xl flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+            <div className="rounded-3xl border border-border shadow-soft bg-white">
+              {/* ── Avatar + Name row ── */}
+              <div className="px-5 pt-5 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  {/* Avatar circle */}
+                  <div className="w-20 h-20 rounded-full ring-4 ring-white bg-gradient-to-br from-violet-500 to-purple-700 text-white font-black text-2xl flex items-center justify-center overflow-hidden shadow-md shrink-0">
                     {selectedCandidate.avatar_url ? (
                       <img
                         src={selectedCandidate.avatar_url}
@@ -343,176 +335,250 @@ export function ApplicantStalkerModal({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      selectedCandidate.first_name?.[0] || 'C'
+                      (selectedCandidate.first_name?.[0] || 'C').toUpperCase()
                     )}
                   </div>
 
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-black text-dark">
-                        {selectedCandidate.first_name} {selectedCandidate.last_name}
-                      </h3>
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 pb-1">
+                    <button className="inline-flex items-center gap-1.5 text-xs font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-xl transition-colors">
+                      <ExternalLink className="w-3 h-3" /> Share
+                    </button>
+                    <button className="inline-flex items-center gap-1.5 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white px-4 py-1.5 rounded-xl transition-colors shadow-sm">
+                      <Star className="w-3 h-3" /> View Profile
+                    </button>
+                  </div>
+                </div>
+
+                {/* Name & meta */}
+                <div className="mt-2 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-black text-dark">
+                      {selectedCandidate.first_name} {selectedCandidate.last_name}
+                    </h3>
+                    {selectedCandidate.verifiedDiploma && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-mint-800 bg-mint-50 px-2 py-0.5 rounded-full border border-mint-200">
+                        <ShieldCheck className="w-3 h-3 text-mint-600" /> Verified Diploma
+                      </span>
+                    )}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
+                      selectedCandidate.type === 'applied'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}>
+                      {selectedCandidate.type === 'applied' ? '✓ Applied' : 'Viewed'}
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-600">{selectedCandidate.title}</p>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap pt-0.5">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-mint-500" /> {selectedCandidate.city}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Briefcase className="w-3 h-3 text-slate-400" /> {selectedCandidate.yearsExp} years exp
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Available
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Content: two-column on desktop ── */}
+              <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* LEFT column (spans 2) */}
+                <div className="sm:col-span-2 space-y-4">
+                  {/* Job Readiness Score */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-dark uppercase tracking-wide flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-mint-600" /> Job Readiness Score
+                      </span>
+                      <span className="text-xl font-black text-mint-700">{selectedCandidate.matchScore}%</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-mint-500 transition-all duration-700"
+                        style={{ width: `${selectedCandidate.matchScore}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      This profile is{' '}
+                      <span className={`font-bold ${selectedCandidate.matchScore >= 85 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {selectedCandidate.matchScore >= 85 ? 'highly competitive' : 'competitive'}
+                      </span>{' '}
+                      and matches industry standards.
+                    </p>
+                  </div>
+
+                  {/* About / Bio */}
+                  {selectedCandidate.bio && (
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-black text-dark uppercase tracking-wider">About</h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {selectedCandidate.bio}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Skills */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-mint-600" /> Skills
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCandidate.skills?.map((skill: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200 hover:bg-mint-50 hover:border-mint-200 hover:text-mint-900 transition-colors"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Work Experience (synthesized from title + years) */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-mint-600" /> Work Experience
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                        <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
+                          <Briefcase className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-dark">{selectedCandidate.title}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {selectedCandidate.yearsExp > 2 ? `${selectedCandidate.yearsExp - 2} – Present` : 'Current'}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{selectedCandidate.bio?.slice(0, 80)}...</p>
+                        </div>
+                      </div>
+                      {selectedCandidate.yearsExp > 2 && (
+                        <div className="flex gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                          <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                            <Briefcase className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-dark">Software Developer</p>
+                            <p className="text-[11px] text-slate-500">
+                              {selectedCandidate.yearsExp - 2} years · Contract
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Education & Certifications */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-mint-600" /> Education &amp; Certifications
+                    </h4>
+                    <div className="flex gap-3 p-3 rounded-xl border border-slate-200 bg-white items-start justify-between">
+                      <div className="flex gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <GraduationCap className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-dark">{selectedCandidate.degree}</p>
+                          <p className="text-[11px] text-slate-500">{selectedCandidate.school}</p>
+                        </div>
+                      </div>
                       {selectedCandidate.verifiedDiploma && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-mint-800 bg-mint-50 px-2 py-0.5 rounded-full border border-mint-200">
-                          <ShieldCheck className="w-3 h-3 text-mint-600" /> Verified Diploma
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1 shrink-0">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
                         </span>
                       )}
                     </div>
-                    <p className="text-xs font-semibold text-slate-600 mt-0.5">
-                      {selectedCandidate.title} • {selectedCandidate.yearsExp} Years Exp
-                    </p>
-                    <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3 text-mint-500" /> {selectedCandidate.city} ({selectedCandidate.distanceKm} km away)
-                    </p>
                   </div>
-                </div>
 
-                <div className="text-right bg-mint-50/70 p-3.5 rounded-2xl border border-mint-100">
-                  <span className="text-[10px] uppercase font-bold text-mint-800 block">AI Match Score</span>
-                  <span className="text-2xl font-black text-mint-700">{selectedCandidate.matchScore}%</span>
-                  <p className="text-[10px] text-muted capitalize">
-                    {selectedCandidate.type === 'applied' ? 'Applied Candidate' : 'Job Viewer'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Bio snippet */}
-              {selectedCandidate.bio && (
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-dark uppercase tracking-wider">Candidate Bio</h4>
-                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    "{selectedCandidate.bio}"
-                  </p>
-                </div>
-              )}
-
-              {/* Education & Verified Credentials */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-dark uppercase tracking-wider flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-mint-600" /> Education & Credentials
-                </h4>
-                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-dark">{selectedCandidate.school}</p>
-                    <p className="text-[11px] text-slate-600">{selectedCandidate.degree}</p>
-                  </div>
-                  {selectedCandidate.verifiedDiploma && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3 text-emerald-600" /> Legally Verified
+                  {/* AI Competitor Comparison */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-mint-50/80 to-blue-50/50 border border-mint-200 space-y-2">
+                    <span className="text-xs font-bold text-mint-950 flex items-center gap-1.5">
+                      <TrendingUp className="w-4 h-4 text-mint-600" /> AI Competitor Comparison Against You
                     </span>
-                  )}
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      {currentUserMatchScore >= selectedCandidate.matchScore
+                        ? `You outrank this candidate by ${currentUserMatchScore - selectedCandidate.matchScore}% due to stronger alignment with the job's core skill requirements and verified diploma.`
+                        : `This candidate currently ranks higher with ${selectedCandidate.matchScore}% match score. Consider taking verified assessments or completing your portfolio credentials to increase your rank.`}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Skills Analysis */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-dark uppercase tracking-wider flex items-center gap-1.5">
-                  <Award className="w-4 h-4 text-mint-600" /> Verified Skills Stack
-                </h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedCandidate.skills?.map((skill: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-xl bg-slate-100 text-slate-800 border border-slate-200"
+                {/* RIGHT column */}
+                <div className="space-y-4">
+                  {/* Contact / Meta info */}
+                  <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <h4 className="text-xs font-black text-dark uppercase tracking-wider">Candidate Info</h4>
+                    <div className="space-y-2 text-[11px] text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-mint-500 shrink-0" />
+                        <span>{selectedCandidate.city}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{selectedCandidate.yearsExp} yrs experience</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Target className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                        <span className="font-semibold text-violet-700">{selectedCandidate.matchScore}% AI Match</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Similar profiles from candidates list */}
+                  <div className="p-3.5 rounded-2xl border border-slate-200 bg-white space-y-3">
+                    <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-mint-600" /> Similar Profiles
+                    </h4>
+                    <div className="space-y-2.5">
+                      {candidates
+                        .filter((c) => c.id !== selectedCandidate.id)
+                        .slice(0, 3)
+                        .map((sim, i) => (
+                          <div
+                            key={sim.id || i}
+                            onClick={() => setSelectedCandidate(sim)}
+                            className="flex items-center gap-2.5 cursor-pointer group hover:bg-slate-50 -mx-1 px-1 py-1 rounded-lg transition-colors"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                                i === 0 ? 'bg-blue-500' : i === 1 ? 'bg-rose-500' : 'bg-amber-500'
+                              }`}
+                            >
+                              {sim.avatar_url ? (
+                                <img src={sim.avatar_url} alt={sim.first_name} className="w-full h-full object-cover rounded-full" />
+                              ) : (
+                                sim.first_name?.[0] || 'U'
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-dark truncate group-hover:text-mint-700 transition-colors">
+                                {sim.first_name} {sim.last_name}
+                              </p>
+                              <p className="text-[10px] text-slate-500 truncate">{sim.skills?.slice(0, 2).join(' · ')}</p>
+                            </div>
+                            <span className="text-[10px] font-black text-mint-700 shrink-0">{sim.matchScore}%</span>
+                          </div>
+                        ))}
+                    </div>
+                    <button
+                      onClick={() => setSelectedCandidate(null)}
+                      className="text-[11px] font-bold text-mint-700 hover:text-mint-800 hover:underline flex items-center gap-1 pt-1"
                     >
-                      <CheckCircle2 className="w-3 h-3 text-mint-600" /> {skill}
-                    </span>
-                  ))}
+                      View More Profiles <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Competitor Comparison vs You */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-mint-50/80 to-blue-50/50 border border-mint-200 space-y-2">
-                <span className="text-xs font-bold text-mint-950 flex items-center gap-1.5">
-                  <TrendingUp className="w-4 h-4 text-mint-600" /> AI Competitor Comparison Against You
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  {currentUserMatchScore >= selectedCandidate.matchScore
-                    ? `You outrank this candidate by ${currentUserMatchScore - selectedCandidate.matchScore}% due to stronger alignment with the job's core skill requirements and verified diploma.`
-                    : `This candidate currently ranks higher with ${selectedCandidate.matchScore}% match score. Consider taking verified assessments or completing your portfolio credentials to increase your rank.`}
-                </p>
               </div>
             </div>
           </div>
         ) : (
           /* Candidates List View */
           <div className="space-y-4">
-            {/* Stats row & Filters */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-mint-50/70 p-3.5 rounded-2xl border border-mint-100 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-mint-500 text-white flex items-center justify-center shrink-0">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-lg font-black text-dark block leading-none">{totalApplicantsCount}</span>
-                  <span className="text-[11px] text-muted font-medium">Applied Candidates</span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center shrink-0">
-                  <Eye className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-lg font-black text-dark block leading-none">{totalVisitorsCount}</span>
-                  <span className="text-[11px] text-muted font-medium">Candidates Viewed / Clicked</span>
-                </div>
-              </div>
-
-              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-lg font-black text-emerald-900 block leading-none">
-                    #{currentUserRank > 0 ? currentUserRank : 1}
-                  </span>
-                  <span className="text-[11px] text-emerald-700 font-medium">Your Ranking</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Tabs & Search */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-full sm:w-auto">
-                <button
-                  onClick={() => setActiveTab('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-1 sm:flex-none ${
-                    activeTab === 'all' ? 'bg-white text-dark shadow-xs' : 'text-slate-600 hover:text-dark'
-                  }`}
-                >
-                  All Competitors ({candidates.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('applied')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-1 sm:flex-none ${
-                    activeTab === 'applied' ? 'bg-white text-dark shadow-xs' : 'text-slate-600 hover:text-dark'
-                  }`}
-                >
-                  Applicants Only ({totalApplicantsCount})
-                </button>
-                <button
-                  onClick={() => setActiveTab('viewed')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-1 sm:flex-none ${
-                    activeTab === 'viewed' ? 'bg-white text-dark shadow-xs' : 'text-slate-600 hover:text-dark'
-                  }`}
-                >
-                  Recent Visitors
-                </button>
-              </div>
-
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Filter candidate or skill..."
-                  value={filterQuery}
-                  onChange={(e) => setFilterQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-border text-xs focus:border-mint-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
             {/* Candidate Cards Grid */}
             {loading ? (
               <div className="flex items-center justify-center h-40">

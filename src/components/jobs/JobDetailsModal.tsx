@@ -23,6 +23,7 @@ import {
   GraduationCap,
   Flame,
   Users,
+  Eye,
 } from 'lucide-react';
 
 interface JobDetailsModalProps {
@@ -90,6 +91,18 @@ export function JobDetailsModal({
                 <span className="flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-slate-400" /> Posted {formatRelativeTime(job.created_at)}
                 </span>
+                <span>•</span>
+                <span className="flex items-center gap-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                  <Eye className="w-3.5 h-3.5 text-mint-600" /> {job.views || 0} {(job.views || 0) === 1 ? 'visit' : 'visits'}
+                </span>
+                {typeof job.applicant_count === 'number' && (
+                  <>
+                    <span>•</span>
+                    <span className="flex items-center gap-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                      <Users className="w-3.5 h-3.5 text-blue-600" /> {job.applicant_count} {job.applicant_count === 1 ? 'applicant' : 'applicants'}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>

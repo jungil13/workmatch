@@ -13,6 +13,9 @@ import {
   CheckCircle2,
   Activity,
   ArrowRight,
+  Building2,
+  BarChart2,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -27,7 +30,6 @@ export default function AdminDashboardPage() {
     avgMatch: 0,
   });
   const [pendingDocs, setPendingDocs] = useState<any[]>([]);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,7 +46,6 @@ export default function AdminDashboardPage() {
       { count: verifiedDocs },
       { count: pendingDocsCount },
       docsRes,
-      logsRes,
     ] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'job_seeker'),
@@ -53,8 +54,7 @@ export default function AdminDashboardPage() {
       supabase.from('companies').select('*', { count: 'exact', head: true }),
       supabase.from('documents').select('*', { count: 'exact', head: true }).eq('verification_status', 'verified'),
       supabase.from('documents').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-      supabase.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(4),
-      supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(6),
+      supabase.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(6),
     ]);
 
     setStats({
@@ -68,7 +68,6 @@ export default function AdminDashboardPage() {
       avgMatch: 0,
     });
     setPendingDocs(docsRes.data ?? []);
-    setAuditLogs(logsRes.data ?? []);
     setLoading(false);
   }
 
@@ -76,7 +75,7 @@ export default function AdminDashboardPage() {
     <DashboardLayout
       portal="admin"
       title="Platform Command Center"
-      subtitle="Real-time WorkMatch database metrics, verification queues, and audit events."
+      subtitle="Real-time WorkMatch database metrics, candidate credential verifications, and platform management."
       actions={
         <Link href="/admin/documents">
           <Button variant="primary" size="sm" className="shadow-sm">
@@ -215,32 +214,116 @@ export default function AdminDashboardPage() {
                 )}
               </div>
 
-              {/* Right: Live Audit Log Trail */}
-              <div className="lg:col-span-5 bg-slate-900 text-slate-300 rounded-3xl p-6 shadow-card space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-mint-400" /> Real-Time Audit Trail
+              {/* Right: Platform Management Quick Actions */}
+              <div className="lg:col-span-5 bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4">
+                <div className="pb-3 border-b border-border">
+                  <h3 className="text-base font-bold text-dark flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600" /> Platform Management
                   </h3>
-                  <Link href="/admin/audit-logs" className="text-xs text-mint-400 hover:underline">
-                    View All
-                  </Link>
+                  <p className="text-xs text-muted">Direct management and verification portals.</p>
                 </div>
 
-                {auditLogs.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-6">No audit events recorded yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-                    {auditLogs.map((log) => (
-                      <div key={log.id} className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/60 text-xs space-y-1">
-                        <p className="font-semibold text-white">{log.action}</p>
-                        <div className="flex items-center justify-between text-[10px] text-slate-400">
-                          <span>{log.user_email || 'System'}</span>
-                          <span>{new Date(log.created_at).toLocaleTimeString()}</span>
-                        </div>
+                <div className="space-y-2.5">
+                  <Link
+                    href="/admin/documents"
+                    className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 flex items-center justify-between hover:bg-emerald-100/60 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <FileCheck2 className="w-4 h-4" />
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          Document Verifications
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          {stats.pendingDocuments} pending candidate credentials
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+
+                  <Link
+                    href="/admin/users"
+                    className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          User Accounts Directory
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          {stats.totalUsers} registered users
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+
+                  <Link
+                    href="/admin/companies"
+                    className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          Companies & Employers
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          {stats.companies} registered company profiles
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+
+                  <Link
+                    href="/admin/jobs"
+                    className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                        <Briefcase className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          Live Job Listings
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          {stats.activeJobs} active postings
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+
+                  <Link
+                    href="/admin/analytics"
+                    className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                        <BarChart2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          Analytics & Insights
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          Platform metrics & hiring health
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
           </>

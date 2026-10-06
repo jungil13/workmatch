@@ -8,7 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase/client';
-import { Sparkles, Mail, Lock, Phone, ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Mail, Lock, Phone, ArrowRight, Building2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 export default function EmployerSignUpPage() {
   const router = useRouter();
@@ -25,6 +25,8 @@ export default function EmployerSignUpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,15 +144,12 @@ export default function EmployerSignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background selection:bg-mint-200">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0d3d2e] via-[#0a4a38] to-[#07503f] selection:bg-emerald-200">
       <Navbar />
 
       <main className="flex-1 max-w-xl mx-auto px-4 sm:px-6 py-12 flex flex-col justify-center w-full">
         <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-card space-y-6">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-1.5 bg-mint-50 border border-mint-200 px-3 py-1 rounded-full text-xs font-bold text-mint-800">
-              <Sparkles className="w-3.5 h-3.5 text-mint-600" /> Employer & Recruiter Account
-            </div>
             <h1 className="text-2xl sm:text-3xl font-black text-dark tracking-tight">
               Post Jobs & Hire Top Talent
             </h1>
@@ -242,18 +241,40 @@ export default function EmployerSignUpPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   label="Password *"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   icon={<Lock className="w-4 h-4" />}
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-slate-400 hover:text-slate-700 transition-colors"
+                      tabIndex={-1}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  }
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
                 />
                 <Input
                   label="Confirm Password *"
-                  type="password"
+                  type={showConfirm ? 'text' : 'password'}
                   placeholder="••••••••"
                   icon={<Lock className="w-4 h-4" />}
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm((v) => !v)}
+                      className="text-slate-400 hover:text-slate-700 transition-colors"
+                      tabIndex={-1}
+                      aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  }
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   required

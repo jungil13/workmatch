@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your Password - WorkMatch</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; background-color: #ffffff; border-radius: 24px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+          
+          <!-- Top Emerald Brand Header Bar -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 32px 40px; text-align: center;">
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <!-- WorkMatch Logo Icon -->
+                    <div style="width: 44px; height: 44px; background-color: #ffffff; border-radius: 12px; display: inline-block; text-align: center; line-height: 44px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                        <rect width="20" height="14" x="2" y="7" rx="3" />
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                      </svg>
+                    </div>
+                  </td>
+                  <td style="vertical-align: middle;">
+                    <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff;">WorkMatch</span>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 8px 0 0 0; color: #ecfdf5; font-size: 13px; font-weight: 500;">
+                Smart Job Matching &amp; Verified Talent Platform
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 40px 40px 32px 40px;">
+              <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 800; color: #0f172a; text-align: center; letter-spacing: -0.5px;">
+                Reset Your Password
+              </h1>
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 22px; color: #475569; text-align: center;">
+                We received a request to reset the password associated with your WorkMatch account. Click the button below to set a new password:
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto 28px auto;">
+                <tr>
+                  <td align="center" style="border-radius: 9999px; background-color: #059669;">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display: inline-block; padding: 14px 36px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 9999px; background-color: #059669; border: 1px solid #047857; text-align: center; letter-spacing: 0.2px;">
+                      Reset Password &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security Information Note -->
+              <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 16px; padding: 16px; margin-bottom: 24px;">
+                <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%">
+                  <tr>
+                    <td style="vertical-align: top; padding-right: 10px; width: 20px;">
+                      <span style="font-size: 16px;">&#9989;</span>
+                    </td>
+                    <td>
+                      <p style="margin: 0; font-size: 12px; line-height: 18px; color: #166534; font-weight: 600;">
+                        Security Note:
+                      </p>
+                      <p style="margin: 2px 0 0 0; font-size: 12px; line-height: 18px; color: #15803d;">
+                        This reset link expires in 60 minutes. If you did not make this request, you can safely ignore this email.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Direct URL Fallback -->
+              <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #64748b;">
+                Having trouble with the button? Copy and paste this URL into your browser:
+              </p>
+              <div style="background-color: #f1f5f9; border-radius: 12px; padding: 12px; word-break: break-all; font-family: monospace; font-size: 11px; color: #334155; line-height: 16px;">
+                <a href="{{ .ConfirmationURL }}" style="color: #059669; text-decoration: underline;">
+                  {{ .ConfirmationURL }}
+                </a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; color: #334155;">
+                WorkMatch &bull; Cebu City, Philippines
+              </p>
+              <p style="margin: 0; font-size: 11px; line-height: 16px; color: #94a3b8;">
+                This automated message was sent to protect the security of your WorkMatch account.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

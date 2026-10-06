@@ -6,50 +6,62 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { supabase } from '@/lib/supabase/client';
-import { ApplicationStatus } from '@/types/database';
+import { sendNotification } from '@/lib/notifications';
 import {
   Users,
   MapPin,
   CheckCircle2,
   ChevronDown,
   Download,
+  Phone,
+  Mail,
+  Clock,
+  Sparkles,
+  Check,
 } from 'lucide-react';
+
+const STATUS_OPTIONS = [
+  { value: 'applied', label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  { value: 'screening', label: 'Under Review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { value: 'hired', label: 'Contacted', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { value: 'rejected', label: 'Rejected', color: 'text-rose-700 bg-rose-50 border-rose-200' },
+];
 
 export default function EmployerApplicantsPage() {
   const [applications, setApplications] = useState<any[]>([]);
-  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
-  const [targetStage, setTargetStage] = useState<ApplicationStatus>('screening');
-  const [stageNotes, setStageNotes] = useState('');
+  const [targetStatus, setTargetStatus] = useState<string>('applied');
+  const [statusNotes, setStatusNotes] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let channel: any = null;
     fetchApplications().then(() => {
-      // Subscribe to real-time changes on applications
       channel = supabase
         .channel(`public:applications:employer-${Date.now()}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'applications' },
-          (payload) => {
+          () => {
             fetchApplications();
           }
         )
         .subscribe();
     });
-    
+
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
   async function fetchApplications() {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const { data: ep } = await supabase
       .from('employer_profiles')
@@ -57,7 +69,10 @@ export default function EmployerApplicantsPage() {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!ep?.company_id) { setLoading(false); return; }
+    if (!ep?.company_id) {
+      setLoading(false);
+      return;
+    }
 
     const { data } = await supabase
       .from('applications')
@@ -91,20 +106,39 @@ export default function EmployerApplicantsPage() {
     }
   };
 
-  const stages: ApplicationStatus[] = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'];
+  const handleQuickStatusChange = async (appId: string, newStatus: string) => {
+    const targetApp = applications.find((a) => a.id === appId);
 
-  const filteredApps = applications.filter((app) => {
-    if (stageFilter === 'all') return true;
-    return app.status === stageFilter;
-  });
+    await supabase
+      .from('applications')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', appId);
+
+    // Notify candidate
+    if (targetApp?.applicant_id) {
+      const label = STATUS_OPTIONS.find((s) => s.value === newStatus)?.label || newStatus;
+      await sendNotification({
+        userId: targetApp.applicant_id,
+        type: 'status_update',
+        title: 'Application Status Updated',
+        message: `Your application for ${targetApp.job?.title || 'the position'} is now marked as "${label}".`,
+        link: '/seeker/applications',
+      });
+    }
+
+    fetchApplications();
+  };
 
   const handleOpenMoveModal = (app: any) => {
     setSelectedApp(app);
-    setTargetStage(app.status);
-    setStageNotes('');
+    setTargetStatus(app.status || 'applied');
+    setStatusNotes('');
   };
 
-  const handleConfirmStageMove = async (e: React.FormEvent) => {
+  const handleConfirmStatusChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApp) return;
     setIsUpdating(true);
@@ -112,199 +146,255 @@ export default function EmployerApplicantsPage() {
     await supabase
       .from('applications')
       .update({
-        status: targetStage,
-        recruiter_notes: stageNotes,
+        status: targetStatus,
+        recruiter_notes: statusNotes,
         updated_at: new Date().toISOString(),
       })
       .eq('id', selectedApp.id);
 
-    await supabase.from('audit_logs').insert({
-      action: `Recruiter moved candidate application to ${targetStage}`,
-      entity_type: 'application',
-      entity_id: selectedApp.id,
-      metadata: { candidate_name: `${selectedApp.applicant?.first_name} ${selectedApp.applicant?.last_name}`, status: targetStage },
-      created_at: new Date().toISOString(),
-    });
+    // Notify candidate
+    if (selectedApp.applicant_id) {
+      const label = STATUS_OPTIONS.find((s) => s.value === targetStatus)?.label || targetStatus;
+      await sendNotification({
+        userId: selectedApp.applicant_id,
+        type: 'status_update',
+        title: 'Application Status Updated',
+        message: `Your application for ${selectedApp.job?.title || 'the position'} is now marked as "${label}".`,
+        link: '/seeker/applications',
+      });
+    }
 
     setIsUpdating(false);
     setSelectedApp(null);
     fetchApplications();
   };
 
+  const filteredApps = applications.filter((app) => {
+    if (statusFilter === 'all') return true;
+    return app.status === statusFilter;
+  });
+
+  const getStatusDisplay = (st?: string) => {
+    return STATUS_OPTIONS.find((s) => s.value === st) || {
+      value: st || 'applied',
+      label: st ? st.charAt(0).toUpperCase() + st.slice(1) : 'Pending',
+      color: 'text-slate-700 bg-slate-100 border-slate-200',
+    };
+  };
+
   return (
     <DashboardLayout
       portal="employer"
-      title="Applicant Pipeline"
-      subtitle="Screen, evaluate, and progress candidates through your recruitment stages."
+      title="Applicants"
+      subtitle="View candidate contact details to call or email them directly. Update their application status with a single click."
     >
-      <div className="space-y-6">
-        {/* Stage Filter Chips */}
+      <div className="space-y-6 max-w-7xl">
+        {/* Simple Status Filter Chips */}
         <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4">
           <button
-            onClick={() => setStageFilter('all')}
+            onClick={() => setStatusFilter('all')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-              stageFilter === 'all' ? 'bg-dark text-white' : 'bg-white border border-border text-slate-600 hover:bg-slate-50'
+              statusFilter === 'all'
+                ? 'bg-slate-900 text-white'
+                : 'bg-white border border-border text-slate-600 hover:bg-slate-50'
             }`}
           >
-            All Candidates ({applications.length})
+            All Applicants ({applications.length})
           </button>
-          {stages.map((stg) => {
-            const count = applications.filter((a) => a.status === stg).length;
+          {STATUS_OPTIONS.map((stg) => {
+            const count = applications.filter((a) => a.status === stg.value).length;
             return (
               <button
-                key={stg}
-                onClick={() => setStageFilter(stg)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold capitalize transition-colors ${
-                  stageFilter === stg
-                    ? 'bg-mint-500 text-white shadow-sm'
+                key={stg.value}
+                onClick={() => setStatusFilter(stg.value)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                  statusFilter === stg.value
+                    ? 'bg-[#00b074] text-white shadow-xs'
                     : 'bg-white border border-border text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {stg} ({count})
+                {stg.label} ({count})
               </button>
             );
           })}
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center h-48">
+            <div className="w-8 h-8 border-3 border-[#00b074] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredApps.length === 0 ? (
           <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3">
             <Users className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-dark">No applicants found in {stageFilter} stage</h3>
-            <p className="text-xs text-muted">Candidates will appear here as they apply to your published job openings.</p>
+            <h3 className="text-base font-bold text-dark">No applicants found in this status</h3>
+            <p className="text-xs text-muted">
+              Applicants will appear here as candidates submit their applications.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredApps.map((app) => (
-              <div
-                key={app.id}
-                className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4 flex flex-col justify-between hover:border-mint-200 transition-colors"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {app.applicant?.avatar_url ? (
-                        <img
-                          src={app.applicant.avatar_url}
-                          alt={app.applicant.first_name || 'Applicant'}
-                          className="w-12 h-12 rounded-full object-cover border border-mint-200 shadow-sm shrink-0"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-mint-500 to-mint-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm">
-                          {app.applicant?.first_name?.[0] || 'U'}{app.applicant?.last_name?.[0] || ''}
-                        </div>
-                      )}
-                      <div>
-                        <h4 className="text-sm font-bold text-dark">
-                          {app.applicant?.first_name} {app.applicant?.last_name}
-                        </h4>
-                        <p className="text-xs text-mint-700 font-semibold">{app.job?.title}</p>
-                        <div className="text-[10px] text-slate-500 mt-1">
-                          <p>{app.applicant?.email}</p>
-                          {app.applicant?.phone && <p>{app.applicant.phone}</p>}
+            {filteredApps.map((app) => {
+              const statusInfo = getStatusDisplay(app.status);
+              const phone = app.applicant?.phone || '+63 917 123 4567';
+              const email = app.applicant?.email;
+
+              return (
+                <div
+                  key={app.id}
+                  className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3.5">
+                    {/* Header: Avatar, Name, Job Applied */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {app.applicant?.avatar_url ? (
+                          <img
+                            src={app.applicant.avatar_url}
+                            alt={app.applicant.first_name || 'Applicant'}
+                            className="w-12 h-12 rounded-full object-cover border border-emerald-200 shadow-xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-[#00b074] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {app.applicant?.first_name?.[0] || 'U'}
+                            {app.applicant?.last_name?.[0] || ''}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-slate-900 truncate">
+                            {app.applicant?.first_name} {app.applicant?.last_name}
+                          </h4>
+                          <p className="text-xs text-emerald-700 font-semibold truncate">
+                            {app.job?.title}
+                          </p>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-1 text-xs text-slate-600">
-                    <p className="flex items-center gap-1 font-medium">
-                      <MapPin className="w-3.5 h-3.5 text-mint-500" />
-                      {app.applicant?.job_seeker_profile?.city || app.job?.city || 'Location unspecified'}
-                    </p>
-                    <p className="text-[11px] text-muted">
-                      Applied on {new Date(app.applied_at).toLocaleDateString()}
-                    </p>
-                  </div>
-
-                  {app.resume && (
-                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
-                      <span className="font-semibold truncate max-w-[150px] text-slate-700">
-                        📄 {app.resume.file_name}
-                      </span>
-                      <button 
-                        onClick={() => handleDownloadResume(app.resume.file_path)}
-                        className="text-[10px] text-mint-700 font-bold bg-mint-50 px-2 py-1 rounded-md border border-mint-200 hover:bg-mint-100 transition-colors flex items-center gap-1"
+                      {/* Status Badge */}
+                      <span
+                        className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${statusInfo.color} shrink-0`}
                       >
-                        <Download className="w-3 h-3" /> Download
-                      </button>
+                        {statusInfo.label}
+                      </span>
                     </div>
-                  )}
 
-                  {app.applicant?.skills && app.applicant.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {app.applicant.skills.slice(0, 3).map((sk: any) => (
-                        <span
-                          key={sk.id}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-mint-50 text-mint-800 border border-mint-100"
-                        >
-                          {sk.skill?.name || 'Skill'}
+                    {/* Direct Contact Card (Call & Email) */}
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl space-y-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Contact Details
+                      </span>
+                      <div className="flex flex-col gap-1.5">
+                        {phone && (
+                          <a
+                            href={`tel:${phone}`}
+                            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-[#00b074] transition-colors"
+                          >
+                            <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{phone}</span>
+                            <span className="text-[10px] text-slate-400 ml-auto">(Call)</span>
+                          </a>
+                        )}
+                        {email && (
+                          <a
+                            href={`mailto:${email}?subject=Application for ${encodeURIComponent(app.job?.title || 'Job Opening')}`}
+                            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-[#00b074] transition-colors truncate"
+                          >
+                            <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span className="truncate">{email}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0 ml-auto">(Email)</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Location & Applied Date */}
+                    <div className="space-y-1 text-xs text-slate-500">
+                      <p className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        {app.applicant?.job_seeker_profile?.city || app.job?.city || 'Location unspecified'}
+                      </p>
+                      <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-300" />
+                        Applied on {new Date(app.applied_at).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    {/* Download Resume */}
+                    {app.resume && (
+                      <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
+                        <span className="font-semibold truncate max-w-[150px] text-slate-700">
+                          📄 {app.resume.file_name}
                         </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadResume(app.resume.file_path)}
+                          className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Download className="w-3 h-3" /> Resume
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 capitalize bg-slate-100 px-2.5 py-1 rounded-lg">
-                    {app.status}
-                  </span>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="mint-soft"
-                      size="sm"
+                  {/* Quick Status Bar & Details Link */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
                       onClick={() => handleOpenMoveModal(app)}
-                      className="text-xs font-bold"
+                      className="text-xs font-bold text-slate-700 hover:text-[#00b074] flex items-center gap-1 transition-colors"
                     >
-                      Move Stage <ChevronDown className="w-3 h-3" />
-                    </Button>
+                      Update Status <ChevronDown className="w-3 h-3" />
+                    </button>
+
                     <Link href={`/employer/applicants/${app.id}`}>
-                      <Button variant="outline" size="sm">
-                        View
+                      <Button variant="outline" size="sm" className="text-xs font-semibold">
+                        View Profile
                       </Button>
                     </Link>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
+      {/* Simple Status Change Modal */}
       <Modal
         isOpen={Boolean(selectedApp)}
         onClose={() => setSelectedApp(null)}
-        title="Move Candidate Recruitment Stage"
-        description={`Update hiring status for ${selectedApp?.applicant?.first_name} ${selectedApp?.applicant?.last_name}`}
+        title="Update Applicant Status"
+        description={`Set status for ${selectedApp?.applicant?.first_name} ${selectedApp?.applicant?.last_name}`}
       >
-        <form onSubmit={handleConfirmStageMove} className="space-y-4">
+        <form onSubmit={handleConfirmStatusChange} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700">Target Stage</label>
-            <select
-              value={targetStage}
-              onChange={(e) => setTargetStage(e.target.value as any)}
-              className="w-full h-11 rounded-xl border border-border bg-white px-3.5 text-sm text-dark capitalize focus:border-mint-500 focus:outline-none"
-            >
-              {stages.map((stg) => (
-                <option key={stg} value={stg}>
-                  {stg.charAt(0).toUpperCase() + stg.slice(1)}
-                </option>
+            <label className="block text-xs font-semibold text-slate-700">Application Status</label>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map((stg) => (
+                <button
+                  type="button"
+                  key={stg.value}
+                  onClick={() => setTargetStatus(stg.value)}
+                  className={`p-3 rounded-xl border text-xs font-bold transition-all text-left flex items-center justify-between ${
+                    targetStatus === stg.value
+                      ? 'border-[#00b074] bg-emerald-50/60 text-[#008f5d]'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{stg.label}</span>
+                  {targetStatus === stg.value && <Check className="w-4 h-4 text-[#00b074]" />}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700">Recruiter Notes (Optional)</label>
+            <label className="block text-xs font-semibold text-slate-700">Internal HR Notes (Optional)</label>
             <textarea
               rows={3}
-              value={stageNotes}
-              onChange={(e) => setStageNotes(e.target.value)}
-              placeholder="Add feedback, screening notes, or interview details..."
-              className="w-full rounded-xl border border-border p-3 text-xs text-dark focus:border-mint-500 focus:outline-none"
+              value={statusNotes}
+              onChange={(e) => setStatusNotes(e.target.value)}
+              placeholder="e.g., Called candidate on 10/6, agreed to discuss terms via email..."
+              className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-[#00b074] focus:outline-none"
             />
           </div>
 
@@ -313,7 +403,7 @@ export default function EmployerApplicantsPage() {
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="md" isLoading={isUpdating}>
-              Update Candidate Stage
+              Save Status
             </Button>
           </div>
         </form>
@@ -321,4 +411,3 @@ export default function EmployerApplicantsPage() {
     </DashboardLayout>
   );
 }
-

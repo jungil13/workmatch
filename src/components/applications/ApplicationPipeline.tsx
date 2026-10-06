@@ -11,10 +11,8 @@ interface ApplicationPipelineProps {
 export function ApplicationPipeline({ currentStatus, statusHistory = [] }: ApplicationPipelineProps) {
   const stages: Array<{ key: ApplicationStatus; label: string }> = [
     { key: 'applied', label: 'Applied' },
-    { key: 'screening', label: 'Screening' },
-    { key: 'interview', label: 'Interview' },
-    { key: 'offer', label: 'Offer' },
-    { key: 'hired', label: 'Hired' },
+    { key: 'screening', label: 'Under Review' },
+    { key: 'hired', label: 'Contacted' },
   ];
 
   if (currentStatus === 'rejected') {

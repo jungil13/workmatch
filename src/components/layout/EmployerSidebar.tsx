@@ -68,8 +68,7 @@ export function EmployerSidebar() {
     { name: 'Dashboard', href: '/employer/dashboard', icon: LayoutDashboard },
     { name: 'Post a Job', href: '/employer/jobs/create', icon: PlusCircle },
     { name: 'Job Postings', href: '/employer/jobs', icon: Briefcase },
-    { name: 'Applicant Pipeline', href: '/employer/applicants', icon: Users },
-    { name: 'Interviews', href: '/employer/interviews', icon: Calendar },
+    { name: 'Applicants', href: '/employer/applicants', icon: Users },
     { name: 'HR Analytics', href: '/employer/analytics', icon: BarChart3 },
     { name: 'Company Profile', href: '/employer/profile', icon: Building },
     { name: 'Settings', href: '/employer/settings', icon: Settings },
@@ -97,7 +96,11 @@ export function EmployerSidebar() {
             Employer Portal
           </p>
           {links.map((link) => {
-            const isActive = pathname === link.href || (link.href !== '/employer/dashboard' && pathname.startsWith(link.href));
+            const isActive =
+              link.href === '/employer/jobs'
+                ? pathname === '/employer/jobs'
+                : pathname === link.href ||
+                  (link.href !== '/employer/dashboard' && pathname.startsWith(link.href + '/'));
             const Icon = link.icon;
             return (
               <Link

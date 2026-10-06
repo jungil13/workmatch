@@ -14,12 +14,17 @@
   --border-color: #E5E7EB;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   color: var(--text-dark);
   background-color: var(--bg-color);
   font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* Glassmorphism & Surface Tokens */

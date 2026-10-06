@@ -1,20 +1,71 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase/client';
-import { Sparkles, Mail, Lock, ArrowRight, ShieldCheck, Briefcase, UserCheck } from 'lucide-react';
+import { Sparkles, Mail, Lock, ArrowRight, ShieldCheck, Briefcase, UserCheck, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function UnifiedSignInPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    // 1. Listen for Supabase PASSWORD_RECOVERY event
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovering(true);
+        window.location.href = '/auth/reset-password';
+      }
+    });
+
+    // 2. Check if URL contains hash parameters (e.g., from Supabase recovery redirect)
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashString = window.location.hash.startsWith('#')
+        ? window.location.hash.substring(1)
+        : window.location.hash;
+      const params = new URLSearchParams(hashString);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      const type = params.get('type');
+      const errorCode = params.get('error_code');
+      const errorDescription = params.get('error_description');
+
+      if (errorCode || errorDescription) {
+        const decoded = decodeURIComponent(errorDescription || errorCode || 'Reset link error');
+        setError(decoded.replace(/\+/g, ' '));
+        return;
+      }
+
+      if (type === 'recovery' && accessToken) {
+        setIsRecovering(true);
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+        }).then(({ error: sessionErr }) => {
+          if (!sessionErr) {
+            window.location.href = '/auth/reset-password';
+          } else {
+            window.location.href = `/auth/reset-password${window.location.hash}`;
+          }
+        }).catch(() => {
+          window.location.href = `/auth/reset-password${window.location.hash}`;
+        });
+      }
+    }
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleRedirectByRole = async (userId: string) => {
     try {
@@ -89,28 +140,47 @@ export default function UnifiedSignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background selection:bg-mint-200">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0d3d2e] via-[#0a4a38] to-[#07503f] selection:bg-emerald-200">
       <Navbar />
 
       <main className="flex-1 max-w-md mx-auto px-4 sm:px-6 py-16 flex flex-col justify-center w-full">
         <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-card space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-1.5 bg-mint-50 border border-mint-200 px-3 py-1 rounded-full text-xs font-bold text-mint-800">
-              <Sparkles className="w-3.5 h-3.5 text-mint-600" /> WorkMatch Universal Login
+          {isRecovering ? (
+            <div className="text-center py-10 space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs">
+                <Loader2 className="w-7 h-7 text-emerald-600 animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold text-dark">Verifying Password Reset...</h2>
+                <p className="text-xs text-muted">
+                  Validating your security token and redirecting you to set a new password.
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-dark tracking-tight">
-              Sign In to WorkMatch
-            </h1>
-            <p className="text-xs text-muted">
-              Enter your credentials. You will be automatically routed to your Job Seeker, Employer, or Admin dashboard.
-            </p>
-          </div>
+          ) : (
+            <>
+              <div className="text-center space-y-2">
+                <h1 className="text-2xl sm:text-3xl font-black text-dark tracking-tight">
+                  Sign In to WorkMatch
+                </h1>
+                <p className="text-xs text-muted">
+                  Enter your credentials. You will be automatically routed to your Job Seeker, Employer, or Admin dashboard.
+                </p>
+              </div>
 
-          {error && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium animate-shake">
-              {error}
-            </div>
-          )}
+              {error && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium animate-shake space-y-2">
+                  <p>{error}</p>
+                  {(error.toLowerCase().includes('expired') || error.toLowerCase().includes('invalid') || error.toLowerCase().includes('denied')) && (
+                    <Link
+                      href="/auth/forgot-password"
+                      className="inline-block font-bold text-rose-800 underline hover:text-rose-950"
+                    >
+                      Request a fresh password reset link &rarr;
+                    </Link>
+                  )}
+                </div>
+              )}
 
           {/* Social Sign In Button */}
           <button
@@ -165,20 +235,31 @@ export default function UnifiedSignInPage() {
             <div className="space-y-1">
               <Input
                 label="Password *"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 icon={<Lock className="w-4 h-4" />}
+                rightElement={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="text-slate-400 hover:text-slate-700 transition-colors"
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                }
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
               <div className="flex justify-end pt-1">
-                {/* <Link
+                <Link
                   href="/auth/forgot-password"
-                  className="text-xs text-mint-700 hover:text-mint-800 font-semibold hover:underline"
+                  className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold hover:underline"
                 >
                   Forgot password?
-                </Link> */}
+                </Link>
               </div>
             </div>
 
@@ -193,21 +274,6 @@ export default function UnifiedSignInPage() {
             </Button>
           </form>
 
-          {/* Quick role dashboard indicator */}
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-around text-[11px] text-slate-600 font-medium">
-            <span className="flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-mint-600" /> Job Seeker
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="flex items-center gap-1">
-              <Briefcase className="w-3.5 h-3.5 text-slate-700" /> Employer
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> Admin
-            </span>
-          </div>
-
           <div className="pt-2 border-t border-border text-center space-y-2 text-xs text-muted">
             <p>
               Don't have an account yet?{' '}
@@ -216,7 +282,9 @@ export default function UnifiedSignInPage() {
               </Link>
             </p>
           </div>
-        </div>
+        </>
+      )}
+    </div>
       </main>
 
       <Footer />

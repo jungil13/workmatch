@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
+import { sendNotification } from '@/lib/notifications';
 import { Job, Company } from '@/types/database';
 import {
   UploadCloud,
@@ -195,6 +196,42 @@ export function ApplyModal({
 
       if (appError) {
         throw new Error(appError.message || 'Failed to submit application.');
+      }
+
+      // 1. Notify Employer about the new applicant
+      try {
+        if (job.company_id) {
+          const { data: employerData } = await supabase
+            .from('employer_profiles')
+            .select('user_id')
+            .eq('company_id', job.company_id)
+            .maybeSingle();
+
+          if (employerData?.user_id) {
+            await sendNotification({
+              userId: employerData.user_id,
+              type: 'application',
+              title: 'New Applicant Received',
+              message: `A candidate applied for ${job.title}. Candidate credentials and contact info are ready.`,
+              link: '/employer/applicants',
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.warn('Employer notification warning:', notifErr);
+      }
+
+      // 2. Notify Applicant confirming their application
+      try {
+        await sendNotification({
+          userId: user.id,
+          type: 'application',
+          title: 'Application Submitted!',
+          message: `You successfully applied for ${job.title} at ${job.company?.name || 'the hiring team'}.`,
+          link: '/seeker/applications',
+        });
+      } catch (notifErr) {
+        console.warn('Candidate notification warning:', notifErr);
       }
 
       setSuccess(true);

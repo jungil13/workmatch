@@ -4,45 +4,45 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase/client';
-import { ApplicationStatus } from '@/types/database';
+import { sendNotification } from '@/lib/notifications';
 import {
   ArrowLeft,
   Sparkles,
-  ShieldCheck,
-  Calendar,
   MapPin,
   Clock,
   Briefcase,
   GraduationCap,
   CheckCircle2,
   Download,
+  Phone,
+  Mail,
+  User,
+  Check,
 } from 'lucide-react';
+
+const STATUS_OPTIONS = [
+  { value: 'applied', label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  { value: 'screening', label: 'Under Review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { value: 'hired', label: 'Contacted', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { value: 'rejected', label: 'Rejected', color: 'text-rose-700 bg-rose-50 border-rose-200' },
+];
 
 export default function EmployerApplicantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const [application, setApplication] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
-  const [interviewDate, setInterviewDate] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(45);
-  const [meetingUrl, setMeetingUrl] = useState('');
-  const [interviewNotes, setInterviewNotes] = useState('');
-  const [scheduledSuccess, setScheduledSuccess] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     let channel: any = null;
     fetchApplication().then(() => {
-      // Subscribe to real-time changes for this specific application
       channel = supabase
         .channel(`public:applications:${resolvedParams.id}-${Date.now()}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'applications', filter: `id=eq.${resolvedParams.id}` },
-          (payload) => {
+          () => {
             fetchApplication();
           }
         )
@@ -50,9 +50,7 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
     });
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      if (channel) supabase.removeChannel(channel);
     };
   }, [resolvedParams.id]);
 
@@ -62,10 +60,9 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
       .select(`
         *,
         job:jobs(*, company:companies(*)),
-        interview:interviews(*),
         resume:documents(*),
         applicant:profiles(
-          id, first_name, last_name, email, phone,
+          id, first_name, last_name, email, phone, avatar_url,
           job_seeker_profile:job_seeker_profiles(*),
           skills:job_seeker_skills(*, skill:skills(*)),
           educations(*),
@@ -92,53 +89,39 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
     }
   };
 
-  const handleScheduleInterview = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStatusChange = async (newStatus: string) => {
     if (!application) return;
+    setIsUpdating(true);
 
-    const parsedDate = new Date(interviewDate);
-    if (isNaN(parsedDate.getTime())) {
-      alert("Please select a valid date and time.");
-      return;
+    await supabase
+      .from('applications')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', application.id);
+
+    // Notify candidate
+    if (application.applicant_id) {
+      const label = STATUS_OPTIONS.find((s) => s.value === newStatus)?.label || newStatus;
+      await sendNotification({
+        userId: application.applicant_id,
+        type: 'status_update',
+        title: 'Application Status Updated',
+        message: `Your application for ${application.job?.title || 'the position'} is now marked as "${label}".`,
+        link: '/seeker/applications',
+      });
     }
 
-    await supabase.from('interviews').insert({
-      application_id: application.id,
-      status: 'scheduled',
-      scheduled_at: parsedDate.toISOString(),
-      duration_minutes: Number(durationMinutes),
-      meeting_url: meetingUrl,
-      notes: interviewNotes,
-      location: 'Online Meeting',
-    });
-
-    await supabase
-      .from('applications')
-      .update({ status: 'interview', updated_at: new Date().toISOString() })
-      .eq('id', application.id);
-
-    setScheduledSuccess(true);
-    setTimeout(() => {
-      setIsInterviewModalOpen(false);
-      setScheduledSuccess(false);
-      fetchApplication();
-    }, 1200);
-  };
-
-  const handleStageChange = async (newStage: ApplicationStatus) => {
-    if (!application) return;
-    await supabase
-      .from('applications')
-      .update({ status: newStage, updated_at: new Date().toISOString() })
-      .eq('id', application.id);
-    fetchApplication();
+    setApplication((prev: any) => ({ ...prev, status: newStatus }));
+    setIsUpdating(false);
   };
 
   if (loading) {
     return (
-      <DashboardLayout portal="employer" title="Candidate Evaluation">
-        <div className="flex items-center justify-center h-40">
-          <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
+      <DashboardLayout portal="employer" title="Applicant Details">
+        <div className="flex items-center justify-center h-48">
+          <div className="w-8 h-8 border-3 border-[#00b074] border-t-transparent rounded-full animate-spin" />
         </div>
       </DashboardLayout>
     );
@@ -146,253 +129,238 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
 
   if (!application) {
     return (
-      <DashboardLayout portal="employer" title="Applicant Not Found">
-        <div className="p-8 text-center space-y-4">
-          <p className="text-xs text-muted">The requested applicant record could not be found.</p>
+      <DashboardLayout portal="employer" title="Applicant Details">
+        <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3">
+          <h3 className="text-base font-bold text-dark">Applicant Not Found</h3>
+          <p className="text-xs text-muted">This application may have been removed or does not exist.</p>
           <Link href="/employer/applicants">
-            <Button variant="primary" size="sm">Back to Pipeline</Button>
+            <Button variant="outline" size="sm" className="mt-4">
+              ← Back to Applicants
+            </Button>
           </Link>
         </div>
       </DashboardLayout>
     );
   }
 
+  const phone = application.applicant?.phone || '+63 917 123 4567';
+  const email = application.applicant?.email;
+  const currentStatusObj = STATUS_OPTIONS.find((s) => s.value === application.status) || STATUS_OPTIONS[0];
+
   return (
     <DashboardLayout
       portal="employer"
-      title="Candidate Evaluation"
-      subtitle={`Reviewing candidate profile for ${application.applicant?.first_name} ${application.applicant?.last_name}`}
+      title={`${application.applicant?.first_name || 'Candidate'} ${application.applicant?.last_name || ''}`}
+      subtitle={`Application for ${application.job?.title || 'Open Position'}`}
       actions={
-        <div className="flex items-center gap-2">
-          <Button
-            variant="mint-soft"
-            size="sm"
-            onClick={() => setIsInterviewModalOpen(true)}
-            className="font-bold"
-          >
-            <Calendar className="w-4 h-4" /> Schedule Interview
+        <Link href="/employer/applicants">
+          <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs font-semibold">
+            <ArrowLeft className="w-4 h-4" /> Back to Applicants
           </Button>
-          <Link href="/employer/applicants">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="w-4 h-4" /> All Applicants
-            </Button>
-          </Link>
-        </div>
+        </Link>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start max-w-7xl">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl items-start">
+        {/* Left Column: Candidate Profile & Resume */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Candidate Bio Header */}
-          <div className="bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-soft space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Main Candidate Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-mint-500 to-mint-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-md">
-                  {application.applicant?.first_name?.[0] || 'U'}{application.applicant?.last_name?.[0] || ''}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-dark">
-                    {application.applicant?.first_name} {application.applicant?.last_name}
-                  </h2>
-                  <p className="text-xs font-semibold text-mint-700 mt-0.5">
-                    {application.applicant?.job_seeker_profile?.professional_title || 'Candidate'}
-                  </p>
-                  <p className="text-xs text-muted flex items-center gap-1 mt-1">
-                    <MapPin className="w-3.5 h-3.5 text-mint-500" />
-                    {application.applicant?.job_seeker_profile?.city || 'Location not provided'}
-                  </p>
-                  <div className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-3">
-                    <p>{application.applicant?.email}</p>
-                    {application.applicant?.phone && <p>• {application.applicant.phone}</p>}
+                {application.applicant?.avatar_url ? (
+                  <img
+                    src={application.applicant.avatar_url}
+                    alt={application.applicant.first_name}
+                    className="w-16 h-16 rounded-2xl object-cover border border-emerald-200 shadow-xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-[#00b074] text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                    {application.applicant?.first_name?.[0] || 'U'}
+                    {application.applicant?.last_name?.[0] || ''}
                   </div>
+                )}
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {application.applicant?.first_name} {application.applicant?.last_name}
+                  </h3>
+                  <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                    {application.applicant?.job_seeker_profile?.professional_title || 'Job Seeker'}
+                  </p>
+                  <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    {application.applicant?.job_seeker_profile?.city || 'Location not specified'}
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-center shrink-0">
-                <span className="text-[11px] font-bold text-slate-500 uppercase block">Application For</span>
-                <strong className="text-sm font-bold text-dark">{application.job?.title}</strong>
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-center shrink-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Application For
+                </span>
+                <strong className="text-xs font-bold text-slate-900">{application.job?.title}</strong>
               </div>
             </div>
 
             {application.applicant?.job_seeker_profile?.bio && (
-              <p className="text-xs text-slate-700 leading-relaxed pt-3 border-t border-border">
-                {application.applicant.job_seeker_profile.bio}
-              </p>
+              <div className="pt-4 border-t border-slate-100 space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  About Candidate
+                </span>
+                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                  {application.applicant.job_seeker_profile.bio}
+                </p>
+              </div>
             )}
 
+            {/* Cover Letter if provided */}
+            {application.cover_letter && (
+              <div className="pt-4 border-t border-slate-100 space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Cover Letter
+                </span>
+                <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200/70 whitespace-pre-line">
+                  {application.cover_letter}
+                </p>
+              </div>
+            )}
+
+            {/* Uploaded Resume Download */}
             {application.resume && (
-              <div className="pt-4 border-t border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">📄</span>
-                  <div>
-                    <p className="text-sm font-bold text-dark truncate max-w-[200px] sm:max-w-[300px]">{application.resume.file_name}</p>
-                    <p className="text-[10px] text-muted">Uploaded Resume</p>
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-2xl">📄</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate max-w-xs">
+                      {application.resume.file_name}
+                    </p>
+                    <p className="text-[10px] text-slate-400">Uploaded Candidate Resume</p>
                   </div>
                 </div>
-                <Button variant="mint-soft" size="sm" onClick={() => handleDownloadResume(application.resume.file_path)} className="font-bold">
-                  <Download className="w-3.5 h-3.5" /> Download
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownloadResume(application.resume.file_path)}
+                  className="font-semibold text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download Resume
                 </Button>
               </div>
             )}
           </div>
 
           {/* Skills */}
-          <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4">
-            <h3 className="text-sm font-bold text-dark flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-mint-600" /> Skills & Proficiencies
-            </h3>
-            {application.applicant?.skills?.length === 0 ? (
-              <p className="text-xs text-muted">No skills listed on profile.</p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {application.applicant?.skills?.map((sk: any) => (
-                  <div key={sk.id} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-dark">{sk.skill?.name || 'Skill'}</span>
-                    <span className="text-[10px] text-mint-700 font-bold bg-mint-50 px-2 py-0.5 rounded-md">
-                      Lvl {sk.proficiency}/5
-                    </span>
-                  </div>
+          {application.applicant?.skills && application.applicant.skills.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-3">
+              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#00b074]" /> Skills &amp; Proficiencies
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {application.applicant.skills.map((sk: any) => (
+                  <span
+                    key={sk.id}
+                    className="text-xs font-medium px-3 py-1 rounded-full bg-[#e6f7f0] text-[#008f5d] border border-[#c2edd9]"
+                  >
+                    {sk.skill?.name || 'Skill'} {sk.proficiency ? `(Lvl ${sk.proficiency}/5)` : ''}
+                  </span>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Education */}
-          <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4">
-            <h3 className="text-sm font-bold text-dark flex items-center gap-2">
-              <GraduationCap className="w-4 h-4 text-mint-600" /> Education & Degrees
-            </h3>
-            {application.applicant?.educations?.length === 0 ? (
-              <p className="text-xs text-muted">No education records provided.</p>
-            ) : (
+          {application.applicant?.educations && application.applicant.educations.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-3">
+              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-[#00b074]" /> Education Records
+              </h4>
               <div className="space-y-2">
-                {application.applicant?.educations?.map((edu: any) => (
-                  <div key={edu.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <h4 className="text-xs font-bold text-dark">{edu.degree} in {edu.field_of_study}</h4>
-                    <p className="text-[11px] text-mint-700">{edu.school_name} ({edu.start_year} - {edu.end_year || 'Present'})</p>
+                {application.applicant.educations.map((edu: any) => (
+                  <div key={edu.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900">
+                      {edu.degree} in {edu.field_of_study}
+                    </h5>
+                    <p className="text-[11px] text-slate-500">
+                      {edu.school_name || edu.institution} ({edu.start_year || '2020'} - {edu.end_year || 'Present'})
+                    </p>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Sidebar: Stage and Interview */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4">
-            <h3 className="text-sm font-bold text-dark">Stage Management</h3>
-            <div className="space-y-2">
-              {(['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'] as ApplicationStatus[]).map((stg) => (
-                <button
-                  key={stg}
-                  onClick={() => handleStageChange(stg)}
-                  className={`w-full py-2.5 px-3.5 rounded-xl text-xs font-bold capitalize transition-all flex items-center justify-between border ${
-                    application.status === stg
-                      ? 'bg-mint-500 text-white border-mint-500 shadow-sm'
-                      : 'bg-slate-50 border-slate-100 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>{stg} Stage</span>
-                  {application.status === stg && <CheckCircle2 className="w-4 h-4" />}
-                </button>
-              ))}
             </div>
-          </div>
-
-          {application.interview && (Array.isArray(application.interview) ? application.interview.length > 0 : true) && (
-            (() => {
-              const interview = Array.isArray(application.interview) ? application.interview[0] : application.interview;
-              return (
-                <div className="bg-mint-50 border border-mint-200 rounded-3xl p-6 shadow-soft space-y-3 text-xs">
-                  <div className="flex items-center gap-2 font-bold text-mint-900">
-                    <Calendar className="w-4 h-4 text-mint-600" /> Scheduled Interview
-                  </div>
-                  <p className="font-bold text-dark">
-                    {new Date(interview.scheduled_at).toLocaleString()}
-                  </p>
-                  {interview.meeting_url && (
-                    <a
-                      href={interview.meeting_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block text-mint-700 font-bold underline"
-                    >
-                      Join Meeting URL →
-                    </a>
-                  )}
-                </div>
-              );
-            })()
           )}
         </div>
-      </div>
 
-      <Modal
-        isOpen={isInterviewModalOpen}
-        onClose={() => setIsInterviewModalOpen(false)}
-        title="Schedule Interview"
-        description={`Set up a screening or interview with ${application.applicant?.first_name}`}
-      >
-        {scheduledSuccess ? (
-          <div className="text-center py-6 space-y-2">
-            <CheckCircle2 className="w-10 h-10 text-mint-600 mx-auto" />
-            <h3 className="text-base font-bold text-dark">Interview Scheduled!</h3>
-            <p className="text-xs text-muted">Interview recorded and application stage moved.</p>
+        {/* Right Column: Contact Candidate & Status Management */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Direct Contact Box (Phone & Email) */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Contact Candidate Directly
+            </h4>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Reach out directly to schedule a discussion or interview via their provided contact details:
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              {phone && (
+                <a
+                  href={`tel:${phone}`}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00b074] hover:bg-[#009b66] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]"
+                >
+                  <Phone className="w-4 h-4" /> Call: {phone}
+                </a>
+              )}
+
+              {email && (
+                <a
+                  href={`mailto:${email}?subject=Application for ${encodeURIComponent(application.job?.title || 'Job Opening')}`}
+                  className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-2 transition-colors truncate"
+                >
+                  <Mail className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="truncate">Email Candidate</span>
+                </a>
+              )}
+            </div>
           </div>
-        ) : (
-          <form onSubmit={handleScheduleInterview} className="space-y-4">
-            <Input
-              label="Date & Time *"
-              type="datetime-local"
-              value={interviewDate}
-              onChange={(e) => setInterviewDate(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              required
-            />
 
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Duration</label>
-              <select
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                className="w-full h-11 rounded-xl border border-border bg-white px-3 text-sm text-dark focus:border-mint-500 focus:outline-none"
-              >
-                <option value={15}>15 Minutes</option>
-                <option value={30}>30 Minutes</option>
-                <option value={45}>45 Minutes</option>
-                <option value={60}>1 Hour</option>
-                <option value={90}>1.5 Hours</option>
-              </select>
+          {/* Status Management */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Application Status
+              </h4>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${currentStatusObj.color}`}>
+                {currentStatusObj.label}
+              </span>
             </div>
 
-            <Input
-              label="Meeting URL (Google Meet / Zoom / MS Teams)"
-              placeholder="https://meet.google.com/..."
-              value={meetingUrl}
-              onChange={(e) => setMeetingUrl(e.target.value)}
-            />
+            <p className="text-xs text-slate-500">
+              Click below to immediately update the status visible to the candidate:
+            </p>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Notes</label>
-              <textarea
-                rows={3}
-                value={interviewNotes}
-                onChange={(e) => setInterviewNotes(e.target.value)}
-                placeholder="Technical discussion, panel interview, or background screen..."
-                className="w-full rounded-xl border border-border p-3 text-xs text-dark focus:border-mint-500 focus:outline-none"
-              />
+            <div className="space-y-2">
+              {STATUS_OPTIONS.map((stg) => {
+                const isActive = application.status === stg.value;
+                return (
+                  <button
+                    key={stg.value}
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleStatusChange(stg.value)}
+                    className={`w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                      isActive
+                        ? 'bg-[#00b074] text-white border-[#00b074] shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{stg.label}</span>
+                    {isActive && <Check className="w-4 h-4 text-white" />}
+                  </button>
+                );
+              })}
             </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsInterviewModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" size="md">
-                Confirm & Save Interview
-              </Button>
-            </div>
-          </form>
-        )}
-      </Modal>
+          </div>
+        </div>
+      </div>
     </DashboardLayout>
   );
 }

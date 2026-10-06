@@ -99,58 +99,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           statusHistory={application.history as any}
         />
 
-        {/* Interview Details */}
-        {application.interview && (
-          <div className="bg-white rounded-3xl border border-border p-6 shadow-soft space-y-4">
-            <div className="flex items-center gap-2 text-dark font-bold text-base">
-              <Calendar className="w-5 h-5 text-mint-600" />
-              <h3>Interview Information</h3>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-1">
-                <span className="text-muted">Date & Time</span>
-                <p className="font-bold text-dark">
-                  {new Date(application.interview.scheduled_at).toLocaleString('en-US', {
-                    dateStyle: 'full',
-                    timeStyle: 'short',
-                  })}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-1">
-                <span className="text-muted">Duration & Format</span>
-                <p className="font-bold text-dark">
-                  {application.interview.duration_minutes} Minutes
-                </p>
-              </div>
-            </div>
-
-            {application.interview.meeting_url && (
-              <div className="bg-mint-50 p-4 rounded-2xl border border-mint-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-mint-900 font-semibold">
-                  <Video className="w-4 h-4 text-mint-600" />
-                  <span>Meeting Room Ready</span>
-                </div>
-                <a
-                  href={application.interview.meeting_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="bg-mint-500 hover:bg-mint-600 text-white px-4 py-2 rounded-xl font-bold transition-colors text-center"
-                >
-                  Join Video Meeting
-                </a>
-              </div>
-            )}
-
-            {application.interview.notes && (
-              <div className="text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                <strong className="block text-dark mb-1">Interview Prep Notes:</strong>
-                {application.interview.notes}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Cover Letter */}
         {application.cover_letter && (

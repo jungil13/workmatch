@@ -4,20 +4,14 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { AppLogo } from '@/components/ui/AppLogo';
 import { LogoutModal } from '@/components/ui/LogoutModal';
+import { NotificationBell } from './NotificationBell';
 import { supabase } from '@/lib/supabase/client';
 import {
-  Search,
-  Building2,
-  Star,
-  Sparkles,
   Menu,
   X,
   LayoutDashboard,
   LogOut,
-  User,
-  ChevronDown,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -39,7 +33,11 @@ export function Navbar() {
           .maybeSingle();
 
         const meta = currentUser.user_metadata;
-        const firstName = userProfile?.first_name || meta?.first_name || currentUser.email?.split('@')[0] || 'User';
+        const firstName =
+          userProfile?.first_name ||
+          meta?.first_name ||
+          currentUser.email?.split('@')[0] ||
+          'User';
         const lastName = userProfile?.last_name || meta?.last_name || '';
         const role = userProfile?.role || meta?.role || 'job_seeker';
         const avatarUrl = userProfile?.avatar_url || meta?.avatar_url || meta?.picture || null;
@@ -56,10 +54,10 @@ export function Navbar() {
   }, []);
 
   const navLinks = [
-    { name: 'Find Jobs', href: '/jobs', icon: Search },
-    { name: 'Companies', href: '/companies', icon: Building2 },
-    { name: 'Company Reviews', href: '/reviews', icon: Star },
-    { name: 'How It Works', href: '/about', icon: Sparkles },
+    { name: 'Find Jobs', href: '/jobs' },
+    { name: 'Company Reviews', href: '/reviews' },
+    { name: 'Upload Diploma', href: '/seeker/diploma' },
+    { name: 'AI Matches', href: '/seeker/scanner', badge: 5 },
   ];
 
   const getDashboardHref = () => {
@@ -71,81 +69,88 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-border shadow-soft">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Brand Logo */}
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-mint-50 border border-mint-200 flex items-center justify-center p-1 shadow-sm group-hover:scale-105 transition-transform">
-                <AppLogo className="w-7 h-7" color="#059669" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <svg
+                  className="w-5 h-5 text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="20" height="14" x="2" y="7" rx="3" />
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                </svg>
               </div>
-              <div>
-                <span className="text-xl font-black tracking-tight text-dark flex items-center gap-0.5">
-                  Work<span className="text-mint-600">Match</span>
-                </span>
-                <span className="hidden sm:block text-[10px] font-semibold text-muted tracking-wider uppercase -mt-1">
-                  Skill & Location Matching
-                </span>
-              </div>
+              <span className="text-xl font-black tracking-tight text-slate-900">
+                Work<span className="text-emerald-600">Match</span>
+              </span>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1.5">
+            <nav className="hidden md:flex items-center gap-6">
               {navLinks.map((link) => {
                 const isActive = pathname === link.href;
-                const Icon = link.icon;
                 return (
                   <Link
                     key={link.name}
                     href={link.href}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                    className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${
                       isActive
-                        ? 'text-mint-700 bg-mint-50 font-semibold'
-                        : 'text-slate-600 hover:text-dark hover:bg-slate-50'
+                        ? 'text-emerald-700 font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-mint-600' : 'text-slate-400'}`} />
-                    {link.name}
+                    <span>{link.name}</span>
+                    {link.badge !== undefined && (
+                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                        {link.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
             </nav>
 
-            {/* Auth State / Profile Controls */}
-            <div className="hidden sm:flex items-center gap-3">
+            {/* Auth Buttons */}
+            <div className="hidden md:flex items-center gap-2.5">
               {loading ? (
-                <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />
+                <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-full" />
               ) : user ? (
                 <div className="flex items-center gap-3">
+                  <NotificationBell />
+
                   <Link href={getDashboardHref()}>
-                    <Button variant="primary" size="sm" className="shadow-sm flex items-center gap-1.5">
-                      <LayoutDashboard className="w-4 h-4" /> Go to Dashboard
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="rounded-full shadow-xs flex items-center gap-1.5 text-xs font-bold px-4"
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
                     </Button>
                   </Link>
 
-                  <div className="flex items-center gap-2.5 pl-3 border-l border-border">
+                  <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
                     {profile?.avatar_url ? (
                       <img
                         src={profile.avatar_url}
                         alt={profile.first_name || 'User'}
-                        className="w-8 h-8 rounded-full object-cover border border-mint-200 shrink-0"
+                        className="w-7 h-7 rounded-full object-cover border border-emerald-200 shrink-0"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-mint-100 text-mint-800 font-bold text-xs flex items-center justify-center border border-mint-200 shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center border border-emerald-200 shrink-0">
                         {profile?.first_name ? profile.first_name[0] : 'U'}
                       </div>
                     )}
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-dark leading-tight line-clamp-1">
-                        {profile?.first_name} {profile?.last_name || ''}
-                      </p>
-                      <p className="text-[10px] text-muted capitalize">
-                        {profile?.role?.replace('_', ' ') || 'User'}
-                      </p>
-                    </div>
                     <button
                       onClick={() => setLogoutModalOpen(true)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-1"
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                       title="Log Out"
                       aria-label="Log out"
                     >
@@ -154,111 +159,96 @@ export function Navbar() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5">
-                  <Link href="/auth/sign-in">
-                    <Button variant="ghost" size="sm">
-                      Sign In
-                    </Button>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/auth/sign-in"
+                    className="rounded-full border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    Log In
                   </Link>
-                  <Link href="/roles">
-                    <Button variant="primary" size="sm" className="shadow-sm">
-                      Get Started
-                    </Button>
+                  <Link
+                    href="/roles"
+                    className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 text-xs shadow-xs transition-colors"
+                  >
+                    Sign Up
                   </Link>
                 </div>
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <div className="flex md:hidden">
+            {/* Mobile Menu & Notification Button */}
+            <div className="flex md:hidden items-center gap-1.5">
+              {user && <NotificationBell />}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-xl text-slate-600 hover:bg-slate-100"
+                className="p-2 rounded-xl text-slate-600 hover:text-dark hover:bg-slate-100"
+                aria-label="Toggle navigation menu"
               >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Mobile Menu Drawer */}
+        {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-border px-4 pt-2 pb-5 space-y-3 animate-slide-up">
-            {navLinks.map((link) => {
-              const Icon = link.icon;
-              return (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-mint-50 hover:text-mint-700"
-                >
-                  <Icon className="w-4 h-4 text-mint-500" />
-                  {link.name}
-                </Link>
-              );
-            })}
-
-            <div className="pt-3 border-t border-border">
-              {user ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    {profile?.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt={profile.first_name || 'User'}
-                        className="w-9 h-9 rounded-full object-cover border border-mint-200 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-mint-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                        {profile?.first_name ? profile.first_name[0] : 'U'}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs font-bold text-dark">{profile?.first_name} {profile?.last_name}</p>
-                      <p className="text-[11px] text-muted capitalize">{profile?.role?.replace('_', ' ')}</p>
-                    </div>
-                  </div>
-                  <Link href={getDashboardHref()} onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="primary" className="w-full justify-center">
-                      <LayoutDashboard className="w-4 h-4" /> Dashboard
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setLogoutModalOpen(true);
-                    }}
-                    className="w-full justify-center text-rose-600 hover:bg-rose-50 border-rose-200"
+          <div className="md:hidden border-t border-slate-100 bg-white px-4 pt-3 pb-6 space-y-3 shadow-md">
+            <nav className="flex flex-col space-y-1">
+              {navLinks.map((link) => {
+                const isActive = pathname === link.href;
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${
+                      isActive
+                        ? 'text-emerald-700 bg-emerald-50'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
                   >
-                    <LogOut className="w-4 h-4" /> Log Out
-                  </Button>
-                </div>
+                    <span>{link.name}</span>
+                    {link.badge !== undefined && (
+                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                        {link.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="pt-2 border-t border-slate-100 flex gap-2">
+              {user ? (
+                <Link
+                  href={getDashboardHref()}
+                  className="w-full text-center rounded-full bg-emerald-600 text-white font-bold py-2 text-xs"
+                >
+                  Dashboard
+                </Link>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <Link href="/roles" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="outline" className="w-full justify-center">
-                      Sign In
-                    </Button>
+                <>
+                  <Link
+                    href="/auth/sign-in"
+                    className="flex-1 text-center rounded-full border border-slate-300 text-slate-700 font-semibold py-2 text-xs"
+                  >
+                    Log In
                   </Link>
-                  <Link href="/roles" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="primary" className="w-full justify-center">
-                      Get Started
-                    </Button>
+                  <Link
+                    href="/roles"
+                    className="flex-1 text-center rounded-full bg-emerald-600 text-white font-bold py-2 text-xs"
+                  >
+                    Sign Up
                   </Link>
-                </div>
+                </>
               )}
             </div>
           </div>
         )}
       </header>
 
-      {/* Reusable Logout Modal */}
-      <LogoutModal
-        isOpen={logoutModalOpen}
-        onClose={() => setLogoutModalOpen(false)}
-      />
+      {/* Logout Modal */}
+      <LogoutModal isOpen={logoutModalOpen} onClose={() => setLogoutModalOpen(false)} />
     </>
   );
 }
