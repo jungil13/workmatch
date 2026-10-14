@@ -150,6 +150,21 @@ export default function HomePage() {
       return;
     }
 
+    const isSignupConfirmed =
+      type === 'signup' ||
+      type === 'email_confirmation' ||
+      hashParams.get('type') === 'signup' ||
+      searchParams.get('type') === 'signup' ||
+      searchParams.get('verified') === '1' ||
+      searchParams.get('confirmed') === 'true';
+
+    if (isSignupConfirmed) {
+      supabase.auth.signOut().finally(() => {
+        window.location.href = '/auth/sign-in?verified=1';
+      });
+      return;
+    }
+
     if (errorCode || errorParam || errorDesc) {
       const redirectParams = new URLSearchParams();
       if (errorParam) redirectParams.set('error', errorParam);
@@ -158,6 +173,19 @@ export default function HomePage() {
       window.location.href = `/auth/sign-in?${redirectParams.toString()}`;
       return;
     }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
+      if (hash.includes('type=signup') || hash.includes('type=email_confirmation')) {
+        supabase.auth.signOut().finally(() => {
+          window.location.href = '/auth/sign-in?verified=1';
+        });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Load real published jobs from Supabase and merge

@@ -40,6 +40,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
+  // Catch email confirmation code landing on root /
+  const authCode = request.nextUrl.searchParams.get('code');
+  if (pathname === '/' && authCode) {
+    const callbackUrl = new URL('/auth/callback', request.url);
+    callbackUrl.searchParams.set('code', authCode);
+    callbackUrl.searchParams.set('type', 'signup');
+    callbackUrl.searchParams.set('next', '/auth/sign-in?verified=1');
+    return NextResponse.redirect(callbackUrl);
+  }
+
+  // Catch verified query landing on root /
+  const typeParam = request.nextUrl.searchParams.get('type');
+  const verifiedParam = request.nextUrl.searchParams.get('verified');
+  if (pathname === '/' && (verifiedParam === '1' || typeParam === 'signup')) {
+    return NextResponse.redirect(new URL('/auth/sign-in?verified=1', request.url));
+  }
+
   /**
    * Email verification enforcement helper.
    *
