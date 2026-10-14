@@ -145,7 +145,12 @@ export default function SeekerSignUpPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        const msg = authError.message;
+        if (msg.toLowerCase().includes('rate') || msg.toLowerCase().includes('limit')) {
+          setError('Email rate limit reached: Supabase default mailer allows max 3 emails per hour. You can manually confirm this email in Supabase Dashboard → Authentication → Users to log in immediately.');
+        } else {
+          setError(msg);
+        }
         setIsLoading(false);
         return;
       }
