@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
@@ -29,6 +29,47 @@ export default function SeekerSignUpPage() {
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+
+  // Check if landing here from an email confirmation redirect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashString = window.location.hash.startsWith('#')
+      ? window.location.hash.substring(1)
+      : window.location.hash;
+    const hashParams = new URLSearchParams(hashString);
+
+    const isVerifiedQuery =
+      searchParams.get('verified') === '1' ||
+      searchParams.get('verified') === 'true' ||
+      searchParams.get('confirmed') === 'true';
+
+    const isVerifiedHash =
+      hashParams.get('type') === 'signup' ||
+      hashParams.get('type') === 'email_confirmation';
+
+    if (isVerifiedQuery || isVerifiedHash) {
+      setIsEmailVerified(true);
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (_) {}
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        if (hash.includes('type=signup') || hash.includes('type=email_confirmation')) {
+          setIsEmailVerified(true);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Resend state
   const [isResending, setIsResending] = useState(false);
@@ -263,6 +304,32 @@ export default function SeekerSignUpPage() {
               Connect your verified skills with top local and remote opportunities.
             </p>
           </div>
+
+          {/* Email Verified Banner */}
+          {isEmailVerified && (
+            <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-bold text-emerald-950">
+                    Email verified successfully!
+                  </h3>
+                  <p className="text-xs text-emerald-800 leading-relaxed font-medium">
+                    Your email address has been verified. You can now proceed to log in to your account.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/auth/sign-in"
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold py-2.5 px-4 rounded-xl transition-all shadow-sm hover:shadow"
+              >
+                Proceed to Log In
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
 
           {error && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium">

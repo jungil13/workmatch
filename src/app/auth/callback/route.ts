@@ -39,8 +39,12 @@ export async function GET(request: NextRequest) {
       if (type === 'recovery') {
         return NextResponse.redirect(`${baseUrl}/auth/reset-password`);
       }
-      // For email confirmation (signup / email change) — go to sign-in with a success hint
+      // For email confirmation (signup / email change)
       if (type === 'signup' || type === 'email') {
+        if (next && (next.includes('sign-up') || next.includes('signup'))) {
+          const sep = next.includes('?') ? '&' : '?';
+          return NextResponse.redirect(`${baseUrl}${next}${sep}verified=1`);
+        }
         return NextResponse.redirect(`${baseUrl}/auth/sign-in?verified=1`);
       }
       return NextResponse.redirect(`${baseUrl}${next}`);

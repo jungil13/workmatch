@@ -246,7 +246,7 @@ export default function UnifiedSignInPage() {
               {verifiedBanner && (
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3.5 rounded-xl flex items-center gap-2 font-semibold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  Email verified successfully! You can now sign in.
+                  Email verified successfully! You can now proceed to log in.
                 </div>
               )}
 
