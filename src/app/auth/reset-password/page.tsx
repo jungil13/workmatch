@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { supabase } from '@/lib/supabase/client';
+import { validatePassword } from '@/lib/passwordValidation';
 import {
   Lock,
   CheckCircle2,
@@ -18,6 +19,7 @@ import {
   AlertCircle,
   KeyRound,
   Check,
+  X,
 } from 'lucide-react';
 
 export default function ResetPasswordPage() {
@@ -91,8 +93,9 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    const validation = validatePassword(password);
+    if (!validation.isValid) {
+      setError(`Password requirements not met: ${validation.errors.join(', ')}.`);
       return;
     }
     if (password !== confirmPassword) {
@@ -138,8 +141,18 @@ export default function ResetPasswordPage() {
     }
   };
 
-  const isLengthValid = password.length >= 8;
+  const pwValidation = validatePassword(password);
   const isMatchValid = password.length > 0 && password === confirmPassword;
+
+  const requirementItem = (label: string, met: boolean) => (
+    <div className={`flex items-center gap-1.5 ${met ? 'text-emerald-700 font-semibold' : 'text-slate-500'}`}>
+      {met
+        ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        : <X className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+      }
+      <span>{label}</span>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-background selection:bg-mint-200">
@@ -245,14 +258,11 @@ export default function ResetPasswordPage() {
 
               {/* Password Requirements Checklist */}
               <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-2xl space-y-1.5 text-[11px]">
-                <div className={`flex items-center gap-1.5 ${isLengthValid ? 'text-emerald-700 font-semibold' : 'text-slate-500'}`}>
-                  <Check className={`w-3.5 h-3.5 ${isLengthValid ? 'text-emerald-600' : 'text-slate-300'}`} />
-                  <span>Minimum 8 characters</span>
-                </div>
-                <div className={`flex items-center gap-1.5 ${isMatchValid ? 'text-emerald-700 font-semibold' : 'text-slate-500'}`}>
-                  <Check className={`w-3.5 h-3.5 ${isMatchValid ? 'text-emerald-600' : 'text-slate-300'}`} />
-                  <span>Passwords match</span>
-                </div>
+                {requirementItem('At least 8 characters', pwValidation.checks.minLength)}
+                {requirementItem('At least one letter', pwValidation.checks.hasLetter)}
+                {requirementItem('At least one number', pwValidation.checks.hasNumber)}
+                {requirementItem('At least one special character (e.g. !@#$%)', pwValidation.checks.hasSpecial)}
+                {requirementItem('Passwords match', isMatchValid)}
               </div>
 
               <Button

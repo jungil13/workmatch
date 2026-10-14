@@ -31,13 +31,17 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // ── Handle token_hash flow (password-reset emails use this) ──────────────
+  // ── Handle token_hash flow (email confirmation and password-reset emails use this) ───
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type });
     if (!error) {
       // For recovery, always go straight to the reset-password page
       if (type === 'recovery') {
         return NextResponse.redirect(`${baseUrl}/auth/reset-password`);
+      }
+      // For email confirmation (signup / email change) — go to sign-in with a success hint
+      if (type === 'signup' || type === 'email') {
+        return NextResponse.redirect(`${baseUrl}/auth/sign-in?verified=1`);
       }
       return NextResponse.redirect(`${baseUrl}${next}`);
     }

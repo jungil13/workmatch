@@ -125,6 +125,41 @@ export default function HomePage() {
   const [filterType, setFilterType] = useState<string>('all'); // 'all', 'full_time', 'hybrid'
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
+  // Handle redirect if Supabase redirects here with auth errors or recovery tokens in URL / hash
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const hashString = window.location.hash.startsWith('#')
+      ? window.location.hash.substring(1)
+      : window.location.hash;
+    const searchString = window.location.search.startsWith('?')
+      ? window.location.search.substring(1)
+      : window.location.search;
+
+    const hashParams = new URLSearchParams(hashString);
+    const searchParams = new URLSearchParams(searchString);
+
+    const errorCode = searchParams.get('error_code') || hashParams.get('error_code');
+    const errorDesc = searchParams.get('error_description') || hashParams.get('error_description');
+    const errorParam = searchParams.get('error') || hashParams.get('error');
+    const type = hashParams.get('type') || searchParams.get('type');
+    const accessToken = hashParams.get('access_token');
+
+    if (type === 'recovery' && accessToken) {
+      window.location.href = `/auth/reset-password${window.location.hash}`;
+      return;
+    }
+
+    if (errorCode || errorParam || errorDesc) {
+      const redirectParams = new URLSearchParams();
+      if (errorParam) redirectParams.set('error', errorParam);
+      if (errorCode) redirectParams.set('error_code', errorCode);
+      if (errorDesc) redirectParams.set('error_description', errorDesc);
+      window.location.href = `/auth/sign-in?${redirectParams.toString()}`;
+      return;
+    }
+  }, []);
+
   // Load real published jobs from Supabase and merge
   useEffect(() => {
     async function loadJobsAndSavedStatus() {

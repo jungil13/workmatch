@@ -7,7 +7,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase/client';
-import { Sparkles, Mail, Lock, ArrowRight, ShieldCheck, Briefcase, UserCheck, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
 
 export default function UnifiedSignInPage() {
   const [email, setEmail] = useState('');
@@ -17,6 +17,13 @@ export default function UnifiedSignInPage() {
   const [isRecovering, setIsRecovering] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [verifiedBanner, setVerifiedBanner] = useState(false);
+
+  // Unverified email banner
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     // 1. Listen for Supabase PASSWORD_RECOVERY event
@@ -62,10 +69,59 @@ export default function UnifiedSignInPage() {
       }
     }
 
+    // 3. Check for query params
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorParam = searchParams.get('error');
+      const errorCodeParam = searchParams.get('error_code');
+      const errorDescParam = searchParams.get('error_description');
+      const verifiedParam = searchParams.get('verified');
+
+      if (errorCodeParam === 'otp_expired' || errorParam === 'link_expired') {
+        setError('Your verification or reset link has expired or has already been used. Please request a new one.');
+      } else if (errorDescParam) {
+        setError(decodeURIComponent(errorDescParam).replace(/\+/g, ' '));
+      } else if (errorParam === 'email_not_verified') {
+        setError('Your email address has not been verified yet. Please check your inbox.');
+      } else if (errorParam) {
+        setError(`Authentication notice: ${errorParam.replace(/_/g, ' ')}`);
+      }
+
+      if (verifiedParam === '1') {
+        setVerifiedBanner(true);
+      }
+    }
+
     return () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  const startResendCooldown = () => {
+    setResendCooldown(60);
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) { clearInterval(interval); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    setResendSuccess('');
+
+    const res = await fetch('/api/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: unverifiedEmail }),
+    });
+    const data = await res.json();
+    setIsResending(false);
+
+    setResendSuccess(data.message || 'Verification email sent! Check your inbox.');
+    startResendCooldown();
+  };
 
   const handleRedirectByRole = async (userId: string) => {
     try {
@@ -91,6 +147,8 @@ export default function UnifiedSignInPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUnverifiedEmail('');
+    setResendSuccess('');
 
     if (!email || !password) {
       setError('Please enter your email and password.');
@@ -105,12 +163,28 @@ export default function UnifiedSignInPage() {
     });
 
     if (authError) {
-      setError(authError.message);
       setIsLoading(false);
+      // Supabase returns "Email not confirmed" for unverified accounts
+      if (authError.message.toLowerCase().includes('email not confirmed')) {
+        setUnverifiedEmail(email);
+        setError('Your email address has not been verified. Please check your inbox for the verification link.');
+      } else {
+        setError(authError.message);
+      }
       return;
     }
 
     if (data.user) {
+      // Check email confirmation status
+      if (!data.user.email_confirmed_at) {
+        // Signed in but email not confirmed — sign out and show the unverified banner
+        await supabase.auth.signOut();
+        setUnverifiedEmail(email);
+        setError('Your email address has not been verified. Please check your inbox for the verification link.');
+        setIsLoading(false);
+        return;
+      }
+
       await handleRedirectByRole(data.user.id);
     } else {
       setError('Sign in failed. Please verify your credentials and try again.');
@@ -168,7 +242,44 @@ export default function UnifiedSignInPage() {
                 </p>
               </div>
 
-              {error && (
+              {/* Email verified success banner */}
+              {verifiedBanner && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3.5 rounded-xl flex items-center gap-2 font-semibold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  Email verified successfully! You can now sign in.
+                </div>
+              )}
+
+              {/* Unverified email banner */}
+              {unverifiedEmail && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-4 rounded-2xl space-y-3">
+                  <p className="font-bold text-sm">Email Verification Required</p>
+                  <p className="text-[12px] leading-relaxed">
+                    We sent a confirmation link to <strong>{unverifiedEmail}</strong>. Click the link in the email to activate your account.
+                  </p>
+
+                  {resendSuccess && (
+                    <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> {resendSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={isResending || resendCooldown > 0}
+                    onClick={handleResendVerification}
+                    className="flex items-center gap-1.5 text-amber-900 font-bold hover:underline disabled:opacity-50 transition-opacity"
+                  >
+                    {isResending
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <RotateCcw className="w-3.5 h-3.5" />
+                    }
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Verification Email'}
+                  </button>
+                </div>
+              )}
+
+              {error && !unverifiedEmail && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl font-medium animate-shake space-y-2">
                   <p>{error}</p>
                   {(error.toLowerCase().includes('expired') || error.toLowerCase().includes('invalid') || error.toLowerCase().includes('denied')) && (
@@ -203,11 +314,11 @@ export default function UnifiedSignInPage() {
                 />
                 <path
                   fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
                 />
                 <path
                   fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
             )}
