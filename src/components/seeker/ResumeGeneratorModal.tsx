@@ -256,18 +256,35 @@ export function ResumeGeneratorModal({
     setSaveSuccess(false);
 
     try {
-      const fileName = `${fullName.replace(/[^a-zA-Z0-9]/g, '_')}_Generated_Resume.pdf`;
-      
+      const text = generatePlainText();
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const safeName = fullName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `${safeName}_Generated_Resume.txt`;
+      const storagePath = `resumes/${user.id}/${Date.now()}_${fileName}`;
+
+      // Upload file to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, blob, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'text/plain',
+        });
+
+      if (uploadError) {
+        console.warn('Storage upload note:', uploadError.message);
+      }
+
       // Upsert or insert into documents table
       const { error } = await supabase.from('documents').insert({
         user_id: user.id,
         document_type: 'resume',
         file_name: fileName,
-        file_path: `generated/resumes/${user.id}_${Date.now()}.pdf`,
-        file_size: 1024 * 45, // approx 45KB simulated
-        mime_type: 'application/pdf',
+        file_path: storagePath,
+        file_size: blob.size,
+        mime_type: 'text/plain',
         verification_status: 'verified',
-        verification_notes: 'Generated and verified from WorkMatch profile data',
+        verification_notes: 'Auto-generated from WorkMatch profile data',
         uploaded_at: new Date().toISOString(),
         verified_at: new Date().toISOString(),
       });
