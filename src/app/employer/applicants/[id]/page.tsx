@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
 import { sendNotification } from '@/lib/notifications';
+import { downloadDocument } from '@/lib/services/resumeService';
 import {
   ArrowLeft,
   Sparkles,
@@ -76,16 +77,22 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
     setLoading(false);
   }
 
-  const handleDownloadResume = async (filePath: string) => {
+  const handleDownloadResume = async (doc: any) => {
+    if (!doc) return;
     try {
-      const { data, error } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60);
-      if (error) throw error;
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
-      }
-    } catch (err) {
+      // Build the applicant profile data so auto-generated resumes can be re-rendered as PDF
+      const profileData = application?.applicant ? {
+        profile:      application.applicant,
+        seekerProfile: application.applicant.job_seeker_profile ?? {},
+        skills:       application.applicant.skills ?? [],
+        educations:   application.applicant.educations ?? [],
+        experiences:  application.applicant.work_experiences ?? [],
+      } : undefined;
+
+      await downloadDocument(doc, doc.file_name, profileData, doc.user_id || application?.applicant?.id);
+    } catch (err: any) {
       console.error('Error downloading resume:', err);
-      alert('Failed to download resume. Please try again later.');
+      alert(err.message || 'Failed to download resume. Please try again.');
     }
   };
 
@@ -239,7 +246,7 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDownloadResume(application.resume.file_path)}
+                  onClick={() => handleDownloadResume(application.resume)}
                   className="font-semibold text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" /> Download Resume

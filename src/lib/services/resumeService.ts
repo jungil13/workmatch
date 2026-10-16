@@ -1,4 +1,4 @@
-﻿import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export interface ResumeDataInput {
   profile: any;
@@ -453,26 +453,54 @@ export async function downloadDocument(
     filePath?.toLowerCase()?.includes('generated');
 
   // Auto-generated → always produce a fresh PDF locally
-  if (isGen && profileData) {
-    const pdfBlob    = await generateResumePdfBlob(profileData);
-    const baseName   = rawName.replace(/\.[^.]+$/, '');
-    const blobUrl    = URL.createObjectURL(pdfBlob);
-    const a          = document.createElement('a');
-    a.href           = blobUrl;
-    a.download       = `${baseName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+  if (isGen) {
+    let resolvedData: ResumeDataInput | undefined = profileData;
+    const targetUserId = userId || (typeof docOrPath === 'object' ? docOrPath?.user_id : null);
 
-    // Background re-upload to keep storage current
-    if (userId && filePath) {
-      supabase.storage
-        .from('documents')
-        .upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true })
-        .catch(() => {});
+    // If profileData is missing or has missing education/experience records, fetch from Supabase
+    if (targetUserId && (!resolvedData || !resolvedData.profile || !resolvedData.educations?.length || !resolvedData.experiences?.length)) {
+      try {
+        const [profRes, spRes, skillsRes, eduRes, expRes] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', targetUserId).maybeSingle(),
+          supabase.from('job_seeker_profiles').select('*').eq('user_id', targetUserId).maybeSingle(),
+          supabase.from('job_seeker_skills').select('*, skill:skills(name)').eq('user_id', targetUserId),
+          supabase.from('educations').select('*').eq('user_id', targetUserId).order('start_date', { ascending: false }),
+          supabase.from('work_experiences').select('*').eq('user_id', targetUserId).order('start_date', { ascending: false }),
+        ]);
+
+        resolvedData = {
+          profile: resolvedData?.profile || profRes.data || {},
+          seekerProfile: resolvedData?.seekerProfile || spRes.data || {},
+          skills: resolvedData?.skills?.length ? resolvedData.skills : (skillsRes.data || []),
+          educations: resolvedData?.educations?.length ? resolvedData.educations : (eduRes.data || []),
+          experiences: resolvedData?.experiences?.length ? resolvedData.experiences : (expRes.data || []),
+        };
+      } catch (fetchErr) {
+        console.warn('Could not auto-fetch full candidate details for PDF generation:', fetchErr);
+      }
     }
-    return;
+
+    if (resolvedData) {
+      const pdfBlob    = await generateResumePdfBlob(resolvedData);
+      const baseName   = rawName.replace(/\.[^.]+$/, '');
+      const blobUrl    = URL.createObjectURL(pdfBlob);
+      const a          = document.createElement('a');
+      a.href           = blobUrl;
+      a.download       = `${baseName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+
+      // Background re-upload to keep storage current
+      if (targetUserId && filePath) {
+        supabase.storage
+          .from('documents')
+          .upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true })
+          .catch(() => {});
+      }
+      return;
+    }
   }
 
   // Uploaded file → download from storage

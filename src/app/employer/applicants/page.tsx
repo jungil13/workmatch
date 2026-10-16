@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { supabase } from '@/lib/supabase/client';
 import { sendNotification } from '@/lib/notifications';
+import { downloadDocument } from '@/lib/services/resumeService';
 import {
   Users,
   MapPin,
@@ -83,7 +84,9 @@ export default function EmployerApplicantsPage() {
         applicant:profiles(
           id, first_name, last_name, email, phone, avatar_url,
           job_seeker_profile:job_seeker_profiles(city, province, professional_title, bio),
-          skills:job_seeker_skills(id, proficiency, skill:skills(name))
+          skills:job_seeker_skills(id, proficiency, skill:skills(name)),
+          educations(*),
+          work_experiences(*)
         )
       `)
       .eq('jobs.company_id', ep.company_id)
@@ -93,16 +96,21 @@ export default function EmployerApplicantsPage() {
     setLoading(false);
   }
 
-  const handleDownloadResume = async (filePath: string) => {
+  const handleDownloadResume = async (doc: any, applicant?: any) => {
+    if (!doc) return;
     try {
-      const { data, error } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60);
-      if (error) throw error;
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
-      }
-    } catch (err) {
+      const profileData = applicant ? {
+        profile: applicant,
+        seekerProfile: applicant.job_seeker_profile ?? {},
+        skills: applicant.skills ?? [],
+        educations: applicant.educations ?? [],
+        experiences: applicant.work_experiences ?? [],
+      } : undefined;
+
+      await downloadDocument(doc, doc.file_name, profileData, doc.user_id);
+    } catch (err: any) {
       console.error('Error downloading resume:', err);
-      alert('Failed to download resume. Please try again later.');
+      alert(err.message || 'Failed to download resume. Please try again later.');
     }
   };
 
@@ -326,7 +334,7 @@ export default function EmployerApplicantsPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleDownloadResume(app.resume.file_path)}
+                          onClick={() => handleDownloadResume(app.resume, app.applicant)}
                           className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           <Download className="w-3 h-3" /> Resume
