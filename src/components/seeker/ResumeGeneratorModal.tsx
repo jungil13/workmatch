@@ -267,8 +267,7 @@ export function ResumeGeneratorModal({
         .from('documents')
         .upload(storagePath, blob, {
           cacheControl: '3600',
-          upsert: true,
-          contentType: 'text/plain',
+          contentType: 'application/octet-stream',
         });
 
       if (uploadError) {

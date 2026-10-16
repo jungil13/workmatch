@@ -65,6 +65,10 @@ export default function SeekerProfilePage() {
   const [resumeActionError, setResumeActionError] = useState('');
   const resumeFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Custom delete confirmation modal state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; filePath?: string; name: string } | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -229,18 +233,25 @@ export default function SeekerProfilePage() {
     }
   };
 
-  // Delete a resume document
-  const handleDeleteDocument = async (docId: string, filePath?: string) => {
-    if (!confirm('Are you sure you want to remove this resume from your profile?')) return;
+  // Delete a resume document — triggered AFTER custom modal confirm
+  const confirmDeleteDocument = async () => {
+    if (!deleteConfirm) return;
+    setDeletingDoc(true);
     try {
-      if (filePath) {
-        await supabase.storage.from('documents').remove([filePath]);
+      if (deleteConfirm.filePath) {
+        await supabase.storage.from('documents').remove([deleteConfirm.filePath]);
       }
-      await supabase.from('documents').delete().eq('id', docId);
+      await supabase.from('documents').delete().eq('id', deleteConfirm.id);
       await refreshDocuments();
+      setResumeActionSuccess('Resume removed from your profile.');
+      setTimeout(() => setResumeActionSuccess(''), 3500);
     } catch (err: any) {
       console.error('Error deleting document:', err);
-      alert('Failed to remove document.');
+      setResumeActionError('Failed to remove resume. Please try again.');
+      setTimeout(() => setResumeActionError(''), 4000);
+    } finally {
+      setDeletingDoc(false);
+      setDeleteConfirm(null);
     }
   };
 
@@ -276,6 +287,58 @@ export default function SeekerProfilePage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-800 selection:bg-emerald-200">
       <Navbar />
+
+      {/* ─── Custom Delete Confirmation Modal ──────────────────────── */}
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4"
+            style={{ animation: 'fadeScaleIn 0.2s ease' }}
+          >
+            {/* Icon */}
+            <div className="w-14 h-14 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6 text-rose-500" strokeWidth={2.5} />
+            </div>
+
+            {/* Text */}
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Delete Resume?</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Are you sure you want to remove{' '}
+                <span className="font-semibold text-slate-700">&ldquo;{deleteConfirm.name}&rdquo;</span>{' '}
+                from your profile? This cannot be undone.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-1">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deletingDoc}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteDocument}
+                disabled={deletingDoc}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {deletingDoc ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                {deletingDoc ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+          <style>{`@keyframes fadeScaleIn { from { opacity:0; transform:scale(.92); } to { opacity:1; transform:scale(1); } }`}</style>
+        </div>
+      )}
 
       {/* ─── Hero Emerald Banner ─────────────────────────────────── */}
       <div className="h-44 sm:h-52 w-full bg-[#0c4a34] bg-gradient-to-r from-[#03442e] via-[#097b53] to-[#03442e] relative shadow-inner" />
@@ -586,18 +649,41 @@ export default function SeekerProfilePage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          {isGenerated && (
+                            <button
+                              type="button"
+                              onClick={() => setIsResumeModalOpen(true)}
+                              className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-[#008f5d] text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Open Resume Customizer & Live Preview"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Preview
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => downloadDocument(doc.file_path, doc.file_name)}
+                            onClick={() =>
+                              downloadDocument(
+                                doc,
+                                doc.file_name,
+                                {
+                                  profile,
+                                  seekerProfile,
+                                  skills,
+                                  educations,
+                                  experiences,
+                                },
+                                userId
+                              )
+                            }
                             className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer"
-                            title="Download or View Resume"
+                            title="Download Resume"
                           >
-                            <Download className="w-3.5 h-3.5 text-slate-500" /> View / Download
+                            <Download className="w-3.5 h-3.5 text-slate-500" /> Download
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteDocument(doc.id, doc.file_path)}
+                            onClick={() => setDeleteConfirm({ id: doc.id, filePath: doc.file_path, name: doc.file_name })}
                             className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                             title="Delete resume"
                           >
