@@ -89,6 +89,12 @@ export default function UnifiedSignInPage() {
 
       if (verifiedParam === '1') {
         setVerifiedBanner(true);
+        // Clean the URL so refreshing doesn't re-show the banner
+        try {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('verified');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+        } catch (_) {}
       }
     }
 

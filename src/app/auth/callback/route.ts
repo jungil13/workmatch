@@ -39,18 +39,16 @@ export async function GET(request: NextRequest) {
       if (type === 'recovery') {
         return NextResponse.redirect(`${baseUrl}/auth/reset-password`);
       }
-      // For email confirmation (signup / email change)
+      // For email confirmation (signup / email change) — sign out then redirect to sign-in with banner
       if (type === 'signup' || type === 'email') {
-        if (next && (next.includes('sign-up') || next.includes('signup'))) {
-          const sep = next.includes('?') ? '&' : '?';
-          return NextResponse.redirect(`${baseUrl}${next}${sep}verified=1`);
-        }
+        // Sign out so the middleware doesn't auto-redirect an authenticated user away from the banner
+        await supabase.auth.signOut();
         return NextResponse.redirect(`${baseUrl}/auth/sign-in?verified=1`);
       }
       return NextResponse.redirect(`${baseUrl}${next}`);
     }
     console.error('verifyOtp error:', error.message);
-    return NextResponse.redirect(`${baseUrl}/auth/sign-in?error=link_expired`);
+    return NextResponse.redirect(`${baseUrl}/auth/sign-in?error=link_expired&error_code=otp_expired`);
   }
 
   // ── Handle PKCE code flow (OAuth / magic-link) ───────────────────────────

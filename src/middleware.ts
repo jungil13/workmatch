@@ -149,7 +149,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // If signed-in AND verified user visits auth pages, redirect to their role portal
-  if (pathname.startsWith('/auth') && user && !pathname.includes('forgot') && !pathname.includes('reset') && !pathname.includes('callback')) {
+  // Allow verified=1 banner to show even if user has a session
+  const isVerifiedRedirect = pathname === '/auth/sign-in' && request.nextUrl.searchParams.get('verified') === '1';
+  if (pathname.startsWith('/auth') && user && !pathname.includes('forgot') && !pathname.includes('reset') && !pathname.includes('callback') && !isVerifiedRedirect) {
     if (!isEmailVerified(user)) {
       // Allow unverified users to stay on the sign-in page so they can resend verification
       return supabaseResponse;
