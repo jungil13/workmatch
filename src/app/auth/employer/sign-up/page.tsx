@@ -52,17 +52,15 @@ export default function EmployerSignUpPage() {
       hashParams.get('type') === 'email_confirmation';
 
     if (isVerifiedQuery || isVerifiedHash) {
-      setIsEmailVerified(true);
-      try {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (_) {}
+      window.location.href = '/auth/sign-in?verified=1';
+      return;
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         const hash = typeof window !== 'undefined' ? window.location.hash : '';
         if (hash.includes('type=signup') || hash.includes('type=email_confirmation')) {
-          setIsEmailVerified(true);
+          window.location.href = '/auth/sign-in?verified=1';
         }
       }
     });

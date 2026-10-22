@@ -6,10 +6,12 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useToast } from '@/components/ui/Toast';
 import { supabase } from '@/lib/supabase/client';
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
 
 export default function UnifiedSignInPage() {
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -67,6 +69,21 @@ export default function UnifiedSignInPage() {
           window.location.href = `/auth/reset-password${window.location.hash}`;
         });
       }
+
+      if ((type === 'signup' || type === 'email_confirmation') && accessToken) {
+        supabase.auth.signOut().then(() => {
+          setVerifiedBanner(true);
+          toast.success(
+            'Email Verified Successfully!',
+            'Your email has been verified. You can now proceed to log in.'
+          );
+          try {
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.hash = '';
+            window.history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+          } catch (_) {}
+        });
+      }
     }
 
     // 3. Check for query params
@@ -83,12 +100,18 @@ export default function UnifiedSignInPage() {
         setError(decodeURIComponent(errorDescParam).replace(/\+/g, ' '));
       } else if (errorParam === 'email_not_verified') {
         setError('Your email address has not been verified yet. Please check your inbox.');
+      } else if (errorParam === 'oauth_error') {
+        setError('Verification link completed. Please enter your credentials to sign in.');
       } else if (errorParam) {
         setError(`Authentication notice: ${errorParam.replace(/_/g, ' ')}`);
       }
 
       if (verifiedParam === '1') {
         setVerifiedBanner(true);
+        toast.success(
+          'Email Verified Successfully!',
+          'Your email has been verified. You can now proceed to log in.'
+        );
         // Clean the URL so refreshing doesn't re-show the banner
         try {
           const cleanUrl = new URL(window.location.href);
