@@ -1,9 +1,10 @@
 const configuredModel = process.env.GEMINI_MODEL?.trim();
 const GEMINI_MODEL =
   configuredModel === 'gemini-1.5-flash' || configuredModel === 'gemini-2.5-flash'
-    ? 'gemini-3.8-flash'
-    : configuredModel || 'gemini-3.8-flash';
-const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+    ? 'gemini-flash-latest'
+    : configuredModel || 'gemini-flash-latest';
+const GEMINI_ENDPOINT =
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const WORKMATCH_SYSTEM_INSTRUCTION = `You are the WorkMatch AI Assistant for a Philippine job-matching platform.
 
@@ -29,7 +30,7 @@ If the user asks you to write code or modify software, reply:
 "I'm the WorkMatch AI Assistant. I can help you explore job opportunities, understand your matches, check job posting warning signs, and practice interviews. I can't help write code or modify software."`;
 
 export function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '';
+  return process.env.GEMINI_API_KEY || '';
 }
 
 export async function generateGeminiJson<T>(params: {
@@ -37,6 +38,7 @@ export async function generateGeminiJson<T>(params: {
   systemInstruction?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  timeoutMs?: number;
 }): Promise<T> {
   const text = await generateGeminiText({
     ...params,
@@ -55,30 +57,30 @@ export async function generateGeminiText(params: {
 }): Promise<string> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured on the server.');
+    throw new Error('GEMINI_API_KEY is not configured in the server .env environment.');
   }
 
   let res: Response;
   try {
+    const generationConfig = {
+      temperature: params.temperature ?? 0.3,
+      maxOutputTokens: params.maxOutputTokens ?? 1024,
+      ...(params.responseMimeType ? { responseMimeType: params.responseMimeType } : {}),
+    };
+
     res = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': apiKey,
       },
-      signal: AbortSignal.timeout(params.timeoutMs ?? 25_000),
+      signal: AbortSignal.timeout(params.timeoutMs ?? 45_000),
       body: JSON.stringify({
-        model: GEMINI_MODEL,
-        system_instruction: params.systemInstruction || WORKMATCH_SYSTEM_INSTRUCTION,
-        input: params.userPrompt,
-        generation_config: {
-          temperature: params.temperature ?? 0.3,
-          max_output_tokens: params.maxOutputTokens ?? 1024,
-          thinking_level: 'low',
+        systemInstruction: {
+          parts: [{ text: params.systemInstruction || WORKMATCH_SYSTEM_INSTRUCTION }],
         },
-        ...(params.responseMimeType
-          ? { response_format: { type: 'text', mime_type: params.responseMimeType } }
-          : {}),
+        contents: [{ role: 'user', parts: [{ text: params.userPrompt }] }],
+        generationConfig,
       }),
     });
   } catch (err) {
@@ -95,33 +97,24 @@ export async function generateGeminiText(params: {
 
   const data: unknown = await res.json();
   const response = data && typeof data === 'object' ? data as Record<string, unknown> : {};
-  let text = typeof response.output_text === 'string' ? response.output_text : '';
-
-  if (!text.trim()) {
-    const output = Array.isArray(response.output)
-      ? response.output
-      : Array.isArray(response.outputs)
-        ? response.outputs
-        : [];
-    text = output
-      .map((item) => {
-        if (!item || typeof item !== 'object') return '';
-        const entry = item as Record<string, unknown>;
-        if (typeof entry.text === 'string') return entry.text;
-        if (typeof entry.content === 'string') return entry.content;
-        if (!Array.isArray(entry.content)) return '';
-        return entry.content
-          .map((part) => {
-            if (!part || typeof part !== 'object') return '';
-            const partText = (part as { text?: unknown }).text;
-            return typeof partText === 'string' ? partText : '';
-          })
-          .filter(Boolean)
-          .join('\n');
-      })
-      .filter(Boolean)
-      .join('\n');
-  }
+  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  const firstCandidate =
+    candidates[0] && typeof candidates[0] === 'object'
+      ? candidates[0] as Record<string, unknown>
+      : {};
+  const content =
+    firstCandidate.content && typeof firstCandidate.content === 'object'
+      ? firstCandidate.content as Record<string, unknown>
+      : {};
+  const parts = Array.isArray(content.parts) ? content.parts : [];
+  const text = parts
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const partText = (part as { text?: unknown }).text;
+      return typeof partText === 'string' ? partText : '';
+    })
+    .filter(Boolean)
+    .join('\n');
 
   if (!text.trim()) {
     throw new Error('Gemini returned an empty response.');

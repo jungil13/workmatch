@@ -17,7 +17,7 @@ export function WorkMatchAssistant({ jobId, companyId }: { jobId?: string; compa
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      text: 'Hi! I\'m the WorkMatch AI Assistant. I can help you with:\n• Job match scores & applications\n• Company verification status\n• Job scam warning signs\n• Interview practice\n\nType a question or click "Practice Interview" to start a mock session.',
+      text: 'Hi! I\'m the WorkMatch AI Assistant. No sign-in is needed to chat. I can help you with:\n• Job match scores & applications\n• Company verification status\n• Job scam warning signs\n\nSign in is required for interview practice and job reports.',
     },
   ]);
   const [reportOpen, setReportOpen] = useState(false);

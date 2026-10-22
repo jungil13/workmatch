@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Progress } from '@/components/ui/Progress';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { ApplyModal } from '@/components/applications/ApplyModal';
-import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { formatSalaryRange } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -39,6 +38,7 @@ export default function SeekerDashboardPage() {
   const [experiences, setExperiences] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [topRecommendations, setTopRecommendations] = useState<any[]>([]);
+  const [recommendationError, setRecommendationError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
@@ -63,7 +63,6 @@ export default function SeekerDashboardPage() {
       eduRes,
       expRes,
       appsRes,
-      jobsRes,
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('job_seeker_profiles').select('*').eq('user_id', userId).maybeSingle(),
@@ -71,7 +70,6 @@ export default function SeekerDashboardPage() {
       supabase.from('educations').select('*').eq('user_id', userId),
       supabase.from('work_experiences').select('*').eq('user_id', userId),
       supabase.from('applications').select('*, job:jobs(*, company:companies(*))').eq('applicant_id', userId).order('applied_at', { ascending: false }).limit(5),
-      supabase.from('jobs').select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))').eq('status', 'published').limit(10),
     ]);
 
     setProfile(profileRes.data);
@@ -81,20 +79,26 @@ export default function SeekerDashboardPage() {
     setExperiences(expRes.data ?? []);
     setApplications(appsRes.data ?? []);
 
-    const candidateData = {
-      profile: seekerRes.data || {},
-      skills: skillsRes.data || [],
-      educations: eduRes.data || [],
-    };
-
-    const rawJobs = jobsRes.data ?? [];
-    const scored = rawJobs.map((j: any) => ({
-      ...j,
-      match: calculateJobMatch(j, candidateData as any),
-    }));
-
-    scored.sort((a, b) => b.match.overallScore - a.match.overallScore);
-    setTopRecommendations(scored.slice(0, 3));
+    try {
+      const response = await fetch('/api/matching/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Could not calculate job matches.');
+      }
+      if (!Array.isArray(data?.results)) {
+        throw new Error('The matching service returned an invalid response.');
+      }
+      setTopRecommendations(data.results.slice(0, 3).map((row: any) => ({ ...row.job, match: row.match })));
+      setRecommendationError('');
+    } catch (error) {
+      console.error('Could not load backend job recommendations:', error);
+      setTopRecommendations([]);
+      setRecommendationError(error instanceof Error ? error.message : 'Job matches are temporarily unavailable.');
+    }
     setLoading(false);
   }
 
@@ -240,6 +244,11 @@ export default function SeekerDashboardPage() {
         </div>
 
         {/* Top AI Job Recommendations Section */}
+        {recommendationError && (
+          <p role="status" className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            Job matches are unavailable: {recommendationError}
+          </p>
+        )}
         {topRecommendations.length > 0 && (
           <div className="bg-white rounded-3xl border border-border p-5 sm:p-7 shadow-soft space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border">

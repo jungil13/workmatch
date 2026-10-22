@@ -14,7 +14,14 @@ function skillId(item: any): string {
 export function hashMatchInputs(job: Job, candidate: CandidateEvaluationData) {
   const profile = candidate.profile || ({} as any);
   const skillKey = (candidate.skills || [])
-    .map((s: any) => [skillId(s), skillName(s), Number(s.proficiency) || 0, Boolean(s.verified)])
+    .map((s: any) => [
+      skillId(s),
+      skillName(s),
+      s.skill?.description || '',
+      s.skill?.category || '',
+      Number(s.proficiency) || 0,
+      Boolean(s.verified),
+    ])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   const eduKey = (candidate.educations || [])
     .map((e: any) => [e.degree || '', e.field_of_study || '', Boolean(e.verified)])
@@ -26,7 +33,14 @@ export function hashMatchInputs(job: Job, candidate: CandidateEvaluationData) {
     .map((e: any) => [e.start_date || '', e.end_date || '', Boolean(e.is_current)])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   const jobSkills = ((job.required_skills || (job as any).job_skills || []) as any[])
-    .map((s) => [skillId(s), skillName(s), s.is_required !== false, Number(s.minimum_proficiency) || 3])
+    .map((s) => [
+      skillId(s),
+      skillName(s),
+      s.skill?.description || s.description || '',
+      s.skill?.category || s.category || '',
+      s.is_required !== false,
+      Number(s.minimum_proficiency) || 3,
+    ])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return {
     profileHash: `v2:${JSON.stringify({

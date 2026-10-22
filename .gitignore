@@ -22,9 +22,6 @@ dist/
 .env.test.local
 .env.production.local
 
-# Keep example environment file
-!.env.example
-
 # Supabase local development
 .supabase/
 

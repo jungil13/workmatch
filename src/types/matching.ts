@@ -28,6 +28,7 @@ export interface MatchResult {
   totalRequiredSkillsCount: number;
   matchedSkillNames: string[];
   missingRequiredSkillNames: string[];
+  skillMatchMode?: 'gemini-assisted' | 'exact';
 }
 
 export interface CandidateEvaluationData {

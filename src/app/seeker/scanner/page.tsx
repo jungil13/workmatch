@@ -10,7 +10,6 @@ import { MatchScoreGauge } from '@/components/matching/MatchScoreGauge';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
-import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { supabase } from '@/lib/supabase/client';
 import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { formatSalaryRange, formatDistance, formatRelativeTime } from '@/lib/utils';
@@ -47,6 +46,7 @@ export default function SeekerAIRecommendationsPage() {
   const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
   const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [matchingError, setMatchingError] = useState('');
 
   // Modals
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
@@ -99,42 +99,27 @@ export default function SeekerAIRecommendationsPage() {
 
     try {
       const res = await fetch('/api/matching/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.results)) {
-        const applicantCounts = await fetchJobApplicantCounts(data.results.map((row: any) => row.job.id));
-        setRecommendedJobs(
-          data.results.map((row: any) => ({
-            ...row.job,
-            match: row.match,
-            applicantCount: applicantCounts[row.job.id] ?? 0,
-          }))
-        );
-        setLoading(false);
-        return;
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || 'Could not calculate job matches.');
       }
-    } catch {
-      // Fall back to local deterministic scoring if Gemini/cache is unavailable.
-    }
-
-    const { data: rawJobs } = await supabase
-      .from('jobs')
-      .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false });
-    let applicantCounts: Record<string, number> = {};
-    try {
-      applicantCounts = await fetchJobApplicantCounts((rawJobs ?? []).map((job: any) => job.id));
+      if (!Array.isArray(data?.results)) {
+        throw new Error('The matching service returned an invalid response.');
+      }
+      const applicantCounts = await fetchJobApplicantCounts(data.results.map((row: any) => row.job.id));
+      setRecommendedJobs(
+        data.results.map((row: any) => ({
+          ...row.job,
+          match: row.match,
+          applicantCount: applicantCounts[row.job.id] ?? 0,
+        }))
+      );
+      setMatchingError('');
     } catch (error) {
-      console.error('Could not load job applicant counts:', error);
+      console.error('Could not load backend job recommendations:', error);
+      setRecommendedJobs([]);
+      setMatchingError(error instanceof Error ? error.message : 'Job matches are temporarily unavailable.');
     }
-
-    const scoredJobs = (rawJobs ?? []).map((job: any) => ({
-      ...job,
-      match: calculateJobMatch(job, cData as any),
-      applicantCount: applicantCounts[job.id] ?? null,
-    }));
-    scoredJobs.sort((a, b) => b.match.overallScore - a.match.overallScore);
-    setRecommendedJobs(scoredJobs);
     setLoading(false);
   }
 
@@ -320,9 +305,11 @@ export default function SeekerAIRecommendationsPage() {
         ) : filteredRecommendations.length === 0 ? (
           <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3 shadow-soft">
             <Briefcase className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-dark">No recommendations found</h3>
+            <h3 className="text-base font-bold text-dark">
+              {matchingError ? 'Job matches unavailable' : 'No recommendations found'}
+            </h3>
             <p className="text-xs text-muted max-w-md mx-auto">
-              Add more skills and update your experience level on your profile to unlock higher matching percentages.
+              {matchingError || 'Add more skills and update your experience level on your profile to improve job matching.'}
             </p>
             <div className="pt-2 flex justify-center gap-2">
               <Button variant="outline" size="sm" onClick={() => { setTierFilter('all'); setSearchQuery(''); }}>

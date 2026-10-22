@@ -10,9 +10,9 @@ import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { JobCard } from '@/components/jobs/JobCard';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
-import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { supabase } from '@/lib/supabase/client';
 import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
+import { fetchBackendJobMatches } from '@/lib/services/jobMatchService';
 import { formatSalaryRange, formatDistance, formatRelativeTime } from '@/lib/utils';
 import {
   Briefcase,
@@ -100,7 +100,8 @@ function FindJobsContent() {
       .from('jobs')
       .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
       .eq('status', 'published')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(40);
 
     if (filters?.city) query = query.ilike('city', `%${filters.city}%`);
     if (filters?.work_arrangement) query = query.eq('work_arrangement', filters.work_arrangement);
@@ -118,15 +119,20 @@ function FindJobsContent() {
     }
 
     const activeCandidate = cDataOverride || candidateData;
-
-    // Attach calculated match scores
-    const jobsWithMatch = rawJobs.map((job) => {
-      if (activeCandidate && activeCandidate.profile) {
-        const match = calculateJobMatch(job, activeCandidate);
-        return { ...job, match, applicantCount: applicantCounts[job.id] ?? null };
+    let backendMatches: Awaited<ReturnType<typeof fetchBackendJobMatches>> = {};
+    if (activeCandidate?.profile?.user_id) {
+      try {
+        backendMatches = await fetchBackendJobMatches(rawJobs.map((job) => job.id));
+      } catch (error) {
+        console.error('Could not load backend job matches:', error);
       }
-      return { ...job, applicantCount: applicantCounts[job.id] ?? null };
-    });
+    }
+
+    const jobsWithMatch = rawJobs.map((job) => ({
+      ...job,
+      match: backendMatches[job.id] || undefined,
+      applicantCount: applicantCounts[job.id] ?? null,
+    }));
 
     setJobs(jobsWithMatch);
     setLoading(false);

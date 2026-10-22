@@ -8,8 +8,9 @@ import { Footer } from '@/components/layout/Footer';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { supabase } from '@/lib/supabase/client';
-import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
+import { fetchBackendJobMatches } from '@/lib/services/jobMatchService';
+import type { MatchResult } from '@/types/matching';
 import { formatSalaryRange, formatRelativeTime } from '@/lib/utils';
 import {
   Search,
@@ -137,16 +138,24 @@ export default function PublicJobsPage() {
       console.error('Could not load job listings:', error);
     }
     const rows = data ?? [];
-    let applicantCounts: Record<string, number> = {};
-    try {
-      applicantCounts = await fetchJobApplicantCounts(rows.map((job) => job.id));
-    } catch (error) {
-      console.error('Could not load job applicant counts:', error);
-    }
+    const matchesPromise: Promise<Record<string, MatchResult>> = candidateData?.profile
+      ? fetchBackendJobMatches(rows.map((job) => job.id)).catch((error) => {
+          console.error('Could not load backend job matches:', error);
+          return {};
+        })
+      : Promise.resolve({});
+    const [applicantCounts, backendMatches] = await Promise.all([
+      fetchJobApplicantCounts(rows.map((job) => job.id)).catch((error) => {
+        console.error('Could not load job applicant counts:', error);
+        return {} as Record<string, number>;
+      }),
+      matchesPromise,
+    ]);
     setJobs(
       rows.map((job) => ({
         ...job,
-        match: candidateData ? calculateJobMatch(job, candidateData) : null,
+        match: backendMatches[job.id] || null,
+        matchUnavailable: Boolean(candidateData?.profile && !backendMatches[job.id]),
         applicantCount: applicantCounts[job.id] ?? null,
       }))
     );
@@ -492,7 +501,7 @@ export default function PublicJobsPage() {
                           {/* Meta Row: Salary, Employment Type, Distance, Applicants */}
                           <div className="flex flex-wrap items-center gap-y-1 gap-x-3.5 text-xs text-slate-500 pt-1">
                             <span className="font-semibold text-slate-700">
-                              $ {formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency || 'PHP')}
+                              {formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency || 'PHP')}
                             </span>
                             <span className="flex items-center gap-1">
                               <Briefcase className="w-3 h-3 text-slate-400" />
@@ -523,7 +532,11 @@ export default function PublicJobsPage() {
                         <div className="text-center sm:text-right">
                           {matchScore === null ? (
                             <span className="text-[10px] text-slate-400 font-medium tracking-tight">
-                              {isSignedIn ? 'Complete your profile for a match' : 'Sign in for a personal match'}
+                              {job.matchUnavailable
+                                ? 'Match unavailable'
+                                : isSignedIn
+                                  ? 'Complete your profile for a match'
+                                  : 'Sign in for a personal match'}
                             </span>
                           ) : (
                             <>
