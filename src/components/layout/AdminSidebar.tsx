@@ -26,7 +26,6 @@ export function AdminSidebar() {
     { name: 'Companies', href: '/admin/companies', icon: Building2 },
     { name: 'Job Moderation', href: '/admin/jobs', icon: Briefcase },
     { name: 'Document Verification', href: '/admin/documents', icon: FileCheck2 },
-    { name: 'Reported Jobs', href: '/admin/reports', icon: ShieldAlert },
     { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileCheck2 },
     { name: 'Review Moderation', href: '/admin/reviews', icon: Star },
     { name: 'Platform Analytics', href: '/admin/analytics', icon: BarChart },
