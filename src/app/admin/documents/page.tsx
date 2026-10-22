@@ -51,7 +51,7 @@ export default function AdminDocumentsQueuePage() {
     setLoading(true);
     setErrorMessage('');
     try {
-      const response = await fetch('/api/admin/documents');
+      const response = await fetch('/api/admin/documents', { cache: 'no-store' });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not load documents.');
 
@@ -91,7 +91,9 @@ export default function AdminDocumentsQueuePage() {
     setReviewNotes(
       action === 'verified'
         ? 'Verified against registrar records and institutional database.'
-        : 'Incomplete document scan; please re-upload clear full-page transcript.'
+        : action === 'rejected'
+        ? 'Incomplete document scan; please re-upload clear full-page transcript.'
+        : 'Returned to pending status for further examination.'
     );
   };
 
@@ -119,15 +121,41 @@ export default function AdminDocumentsQueuePage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not update document status.');
 
+      const savedDocId = selectedDoc.id;
+      const targetStatus = statusAction;
+      const targetNotes = reviewNotes;
+
       setSelectedDoc(null);
       clearUrlParam();
-      await fetchDocuments(false);
-      toast.success(
-        statusAction === 'verified' ? 'Degree approved!' : 'Document rejected',
-        statusAction === 'verified'
-          ? 'The candidate has been notified of their verification.'
-          : 'The document was marked as rejected.'
+
+      // Optimistically update document in local state so UI updates immediately
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === savedDocId
+            ? {
+                ...d,
+                verification_status: targetStatus,
+                verification_notes: targetNotes,
+                verified_at: targetStatus === 'verified' ? new Date().toISOString() : null,
+              }
+            : d
+        )
       );
+
+      toast.success(
+        targetStatus === 'verified'
+          ? 'Degree approved!'
+          : targetStatus === 'rejected'
+          ? 'Document rejected'
+          : 'Status reset to pending',
+        targetStatus === 'verified'
+          ? 'The candidate has been notified of their verification.'
+          : targetStatus === 'rejected'
+          ? 'The document was marked as rejected.'
+          : 'Document has been returned to the pending queue.'
+      );
+
+      await fetchDocuments(false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Could not update document status.';
       setErrorMessage(msg);
@@ -307,33 +335,51 @@ export default function AdminDocumentsQueuePage() {
                       <Trash2 className="w-3.5 h-3.5" /> Delete
                     </Button>
                     {doc.verification_status === 'verified' ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-xs flex items-center justify-center gap-1 shadow-2xs">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex-1 py-1 px-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-[11px] flex items-center justify-center gap-1 shadow-2xs">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#00b074]" /> Approved
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenReview(doc, 'rejected')}
-                          className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200 shrink-0"
-                          title="Reject or re-evaluate document"
+                          className="text-[11px] h-7 px-2 text-rose-600 hover:bg-rose-50 border-rose-200 shrink-0"
+                          title="Reject this verified document"
                         >
-                          Change
+                          Reject
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'pending')}
+                          className="text-[11px] h-7 px-2 text-slate-500 hover:text-amber-700 hover:bg-amber-50 shrink-0"
+                          title="Reset status back to pending"
+                        >
+                          Reset
                         </Button>
                       </div>
                     ) : doc.verification_status === 'rejected' ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1 shadow-2xs">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex-1 py-1 px-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[11px] flex items-center justify-center gap-1 shadow-2xs">
                           <X className="w-3.5 h-3.5 text-rose-600" /> Rejected
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenReview(doc, 'verified')}
-                          className="text-xs text-emerald-600 hover:bg-emerald-50 border-emerald-200 shrink-0"
-                          title="Approve or re-evaluate document"
+                          className="text-[11px] h-7 px-2 text-emerald-600 hover:bg-emerald-50 border-emerald-200 shrink-0"
+                          title="Approve this rejected document"
                         >
                           Approve
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'pending')}
+                          className="text-[11px] h-7 px-2 text-slate-500 hover:text-amber-700 hover:bg-amber-50 shrink-0"
+                          title="Reset status back to pending"
+                        >
+                          Reset
                         </Button>
                       </div>
                     ) : (
@@ -368,7 +414,7 @@ export default function AdminDocumentsQueuePage() {
       <Modal
         isOpen={Boolean(selectedDoc)}
         onClose={handleCloseReview}
-        title={`Degree Verification: ${statusAction === 'verified' ? 'Approve' : 'Reject'}`}
+        title="Document Verification Review"
         description={selectedDoc?.file_name}
       >
         <form onSubmit={handleConfirmDecision} className="space-y-4">
@@ -388,44 +434,63 @@ export default function AdminDocumentsQueuePage() {
                 <p className="text-[11px] text-muted">
                   Candidate: {selectedDoc.profile?.first_name} {selectedDoc.profile?.last_name}
                 </p>
+                <p className="text-[10px] text-muted capitalize mt-0.5">
+                  Current Status: <span className="font-bold text-dark">{selectedDoc.verification_status || 'pending'}</span>
+                </p>
               </div>
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700">Verification Decision</label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+            <label className="block text-xs font-semibold text-slate-700">Set Verification Decision</label>
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
                   setStatusAction('verified');
-                  if (!reviewNotes || reviewNotes.includes('Incomplete document scan')) {
+                  if (!reviewNotes || reviewNotes.includes('Incomplete document scan') || reviewNotes.includes('further examination')) {
                     setReviewNotes('Verified against registrar records and institutional database.');
                   }
                 }}
-                className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                   statusAction === 'verified'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-dark hover:bg-slate-200/60'
                 }`}
               >
-                <Check className="w-3.5 h-3.5" /> Approve Degree
+                <Check className="w-3.5 h-3.5" /> Approve
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setStatusAction('rejected');
-                  if (!reviewNotes || reviewNotes.includes('Verified against registrar records')) {
+                  if (!reviewNotes || reviewNotes.includes('Verified against registrar records') || reviewNotes.includes('further examination')) {
                     setReviewNotes('Incomplete document scan; please re-upload clear full-page transcript.');
                   }
                 }}
-                className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                   statusAction === 'rejected'
                     ? 'bg-rose-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-dark hover:bg-slate-200/60'
                 }`}
               >
-                <X className="w-3.5 h-3.5" /> Reject Document
+                <X className="w-3.5 h-3.5" /> Reject
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusAction('pending');
+                  if (!reviewNotes || reviewNotes.includes('Verified against registrar records') || reviewNotes.includes('Incomplete document scan')) {
+                    setReviewNotes('Returned to pending status for further examination.');
+                  }
+                }}
+                className={`py-2 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                  statusAction === 'pending'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-dark hover:bg-slate-200/60'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" /> Pending
               </button>
             </div>
           </div>
@@ -447,7 +512,7 @@ export default function AdminDocumentsQueuePage() {
             </Button>
             <Button
               type="submit"
-              variant={statusAction === 'verified' ? 'primary' : 'danger'}
+              variant={statusAction === 'verified' ? 'primary' : statusAction === 'rejected' ? 'danger' : 'outline'}
               size="md"
               disabled={saving}
               isLoading={saving}
@@ -456,7 +521,9 @@ export default function AdminDocumentsQueuePage() {
                 ? 'Saving...'
                 : statusAction === 'verified'
                 ? 'Confirm Degree Approval'
-                : 'Confirm Degree Rejection'}
+                : statusAction === 'rejected'
+                ? 'Confirm Degree Rejection'
+                : 'Confirm Reset to Pending'}
             </Button>
           </div>
         </form>

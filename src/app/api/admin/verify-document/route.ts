@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
   const admin = getAdminClient();
   const now = new Date().toISOString();
 
-  const { data: doc, error } = await admin
+  // Update using the authenticated admin client (ctx.supabase) so auth.uid() is populated,
+  // satisfying the PostgreSQL protect_document_verification() trigger.
+  const { data: doc, error } = await ctx.supabase
     .from('documents')
     .update({
       verification_status: status,
@@ -26,11 +28,12 @@ export async function POST(request: NextRequest) {
       reviewed_by: ctx.user!.id,
     })
     .eq('id', documentId)
-    .select('id, user_id, file_name')
+    .select('id, user_id, file_name, verification_status')
     .maybeSingle();
 
   if (error || !doc) {
-    return NextResponse.json({ error: error?.message || 'Document not found.' }, { status: 500 });
+    console.error('Admin document update error:', error);
+    return NextResponse.json({ error: error?.message || 'Document not found or update blocked.' }, { status: 500 });
   }
 
   if (status === 'verified' && doc.user_id) {
