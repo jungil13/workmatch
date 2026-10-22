@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { supabase } from '@/lib/supabase/client';
 import {
   Star,
@@ -13,7 +14,6 @@ import {
   MessageSquare,
   Sparkles,
   ArrowRight,
-  ShieldCheck,
   ThumbsUp,
 } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
@@ -104,9 +104,7 @@ export default function PublicReviewsPage() {
                         className="text-base font-bold text-dark hover:text-mint-600 transition-colors flex items-center gap-1"
                       >
                         {rev.company?.name || 'Company'}
-                        {rev.company?.verified && (
-                          <ShieldCheck className="w-4 h-4 text-mint-500" />
-                        )}
+                        <VerifiedCompanyBadge company={rev.company} />
                       </Link>
                       <div className="flex items-center gap-2 mt-0.5">
                         <div className="flex items-center gap-0.5 text-amber-500">

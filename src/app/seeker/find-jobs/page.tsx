@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
-import { ApplicantStalkerModal } from '@/components/jobs/ApplicantStalkerModal';
 import { JobCard } from '@/components/jobs/JobCard';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { supabase } from '@/lib/supabase/client';
+import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { formatSalaryRange, formatDistance, formatRelativeTime } from '@/lib/utils';
 import {
   Briefcase,
@@ -52,7 +53,6 @@ function FindJobsContent() {
   // Modals
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
   const [selectedJobForApply, setSelectedJobForApply] = useState<any | null>(null);
-  const [selectedJobForStalker, setSelectedJobForStalker] = useState<any | null>(null);
 
   // Initial candidate profile loading
   useEffect(() => {
@@ -110,6 +110,12 @@ function FindJobsContent() {
 
     const { data } = await query;
     const rawJobs = data ?? [];
+    let applicantCounts: Record<string, number> = {};
+    try {
+      applicantCounts = await fetchJobApplicantCounts(rawJobs.map((job) => job.id));
+    } catch (error) {
+      console.error('Could not load job applicant counts:', error);
+    }
 
     const activeCandidate = cDataOverride || candidateData;
 
@@ -117,9 +123,9 @@ function FindJobsContent() {
     const jobsWithMatch = rawJobs.map((job) => {
       if (activeCandidate && activeCandidate.profile) {
         const match = calculateJobMatch(job, activeCandidate);
-        return { ...job, match };
+        return { ...job, match, applicantCount: applicantCounts[job.id] ?? null };
       }
-      return job;
+      return { ...job, applicantCount: applicantCounts[job.id] ?? null };
     });
 
     setJobs(jobsWithMatch);
@@ -295,9 +301,8 @@ function FindJobsContent() {
                     const skillsList = (job.required_skills || (job as any).job_skills || [])
                       .slice(0, 4)
                       .map((sk: any) => sk.skill?.name || sk.name || 'Skill');
-                    const matchScore = job.match?.overallScore || Math.min(96, 75 + ((job.id?.charCodeAt(0) || 0) % 20));
+                    const matchScore = job.match?.overallScore ?? null;
                     const distanceKm = job.match?.distanceKm ?? job.distance_km;
-                    const appliedCount = job.views ? Math.max(Math.floor(job.views / 3), 4) : 24;
                     const isUrgent = job.is_urgent || job.company?.is_urgent;
 
                     return (
@@ -330,9 +335,10 @@ function FindJobsContent() {
                               >
                                 {job.title}
                               </Link>
-                              <p className="text-xs text-slate-500 truncate mt-0.5">
-                                {job.company?.name || 'Company'}
-                              </p>
+                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                <p className="text-xs text-slate-500 truncate">{job.company?.name || 'Company'}</p>
+                                <VerifiedCompanyBadge company={job.company} />
+                              </div>
                             </div>
                           </div>
 
@@ -357,10 +363,16 @@ function FindJobsContent() {
 
                         {/* Match Score & Distance Pill Badges */}
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                            {matchScore}% Match
-                          </span>
+                          {matchScore === null ? (
+                            <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                              Add profile details for a match score
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                              {matchScore}% Match
+                            </span>
+                          )}
                           <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/80">
                             {formatDistance(distanceKm)}
                           </span>
@@ -406,31 +418,12 @@ function FindJobsContent() {
 
                         {/* Card Footer: Overlapping Avatars + Apply Now Button */}
                         <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                          {/* Top row: Avatar stack + applicants count + See Profiles */}
-                          <div
-                            className="flex items-center justify-between gap-2 cursor-pointer hover:bg-emerald-50/60 -mx-1 px-1 py-1 rounded-xl transition-all group/stalker"
-                            onClick={() => setSelectedJobForStalker(job)}
-                            title="View candidates who applied or visited this job"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="flex -space-x-2 overflow-hidden shrink-0">
-                                <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-                                  A
-                                </div>
-                                <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
-                                  B
-                                </div>
-                                <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center">
-                                  C
-                                </div>
-                              </div>
-                              <span className="text-[11px] text-slate-600 font-semibold truncate">
-                                <strong className="text-slate-800">{appliedCount}</strong> people applied
-                              </span>
-                            </div>
-                            <span className="text-[11px] font-bold text-emerald-700 group-hover/stalker:underline flex items-center gap-1 shrink-0">
-                              <Users className="w-3 h-3" /> See Profiles
-                            </span>
+                          {/* Applicant count only; candidate profiles are private to the hiring team. */}
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                            <Users className="w-3 h-3 text-emerald-700" />
+                            {job.applicantCount === null
+                              ? 'Applicant count unavailable'
+                              : `${job.applicantCount} ${job.applicantCount === 1 ? 'applicant' : 'applicants'}`}
                           </div>
 
                           {/* Apply Now Pill Button */}
@@ -479,16 +472,6 @@ function FindJobsContent() {
         />
       )}
 
-      {/* Applicant Stalker Modal */}
-      {selectedJobForStalker && (
-        <ApplicantStalkerModal
-          isOpen={!!selectedJobForStalker}
-          onClose={() => setSelectedJobForStalker(null)}
-          job={selectedJobForStalker}
-          currentUserId={userId}
-          currentUserMatchScore={selectedJobForStalker.match?.overallScore || 92}
-        />
-      )}
     </DashboardLayout>
   );
 }

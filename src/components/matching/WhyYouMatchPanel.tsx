@@ -23,9 +23,10 @@ export function WhyYouMatchPanel({ match }: WhyYouMatchPanelProps) {
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <span className="text-xs font-bold text-mint-700 bg-mint-50 px-2.5 py-1 rounded-full border border-mint-200">
-            {match.tier} Match ({match.overallScore}%)
+            {match.tier} estimated compatibility ({match.overallScore}%)
           </span>
-          <h4 className="text-base font-bold text-dark mt-2">Why you match this role</h4>
+          <h4 className="text-base font-bold text-dark mt-2">Why this score</h4>
+          <p className="text-[11px] text-muted mt-1">This is an estimated compatibility score, not a guarantee of hiring success.</p>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-mint-500 to-mint-600 text-white font-black flex items-center justify-center text-lg shadow-md shadow-mint-500/20">
           {match.overallScore}%
@@ -47,7 +48,7 @@ export function WhyYouMatchPanel({ match }: WhyYouMatchPanelProps) {
 
       {/* Multi-factor Progress Breakdown */}
       <div className="space-y-3 pt-3 border-t border-border">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">6-Factor Algorithm Breakdown</p>
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Weighted criteria</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Object.values(match.factors).map((factor) => {
             const Icon = factorIcons[factor.name] || Sparkles;

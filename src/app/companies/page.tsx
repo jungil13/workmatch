@@ -6,9 +6,10 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { supabase } from '@/lib/supabase/client';
 import { Company } from '@/types/database';
-import { Building2, Search, MapPin, ShieldCheck, Star, Briefcase, ArrowRight, Flame } from 'lucide-react';
+import { Building2, Search, MapPin, Star, Briefcase, ArrowRight, Flame } from 'lucide-react';
 
 export default function CompaniesPage() {
   const [search, setSearch] = useState('');
@@ -167,11 +168,7 @@ export default function CompaniesPage() {
                           <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
                         </span>
                       )}
-                      {company.verified && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-mint-800 bg-mint-50 px-2.5 py-1 rounded-full border border-mint-200">
-                          <ShieldCheck className="w-3.5 h-3.5 text-mint-600" /> Verified
-                        </span>
-                      )}
+                      <VerifiedCompanyBadge company={company} />
                     </div>
                   </div>
 

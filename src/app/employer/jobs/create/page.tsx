@@ -48,6 +48,8 @@ export default function CreateJobPage() {
   const router = useRouter();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [employerId, setEmployerId] = useState<string | null>(null);
+  const [companyVerified, setCompanyVerified] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [allSkills, setAllSkills] = useState<any[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<{ skill_id: string; is_required: boolean; minimum_proficiency: number }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +98,8 @@ export default function CreateJobPage() {
         router.replace('/seeker/dashboard');
         return;
       }
+      const adminAccess = profile.role === 'admin';
+      setIsAdmin(adminAccess);
 
       setEmployerId(user.id);
 
@@ -107,27 +111,17 @@ export default function CreateJobPage() {
 
       if (ep?.company_id) {
         setCompanyId(ep.company_id);
+        const { data: company } = await supabase
+          .from('companies')
+          .select('verified, verification_status')
+          .eq('id', ep.company_id)
+          .maybeSingle();
+        setCompanyVerified(
+          company?.verification_status === 'approved' ||
+          (!company?.verification_status && Boolean(company?.verified))
+        );
       } else {
-        const { data: comp } = await supabase.from('companies').select('id').limit(1).maybeSingle();
-        if (comp) {
-          setCompanyId(comp.id);
-        } else {
-          const { data: newComp } = await supabase.from('companies').insert({
-            name: 'My Company',
-            slug: 'my-company-' + Date.now().toString().slice(-4),
-            city: 'Cebu City',
-            province: 'Cebu',
-            industry: 'Software & Technology',
-          }).select().maybeSingle();
-          if (newComp) {
-            setCompanyId(newComp.id);
-            await supabase.from('employer_profiles').upsert({
-              user_id: user.id,
-              company_id: newComp.id,
-              position: 'Hiring Manager',
-            });
-          }
-        }
+        setCompanyVerified(false);
       }
     });
 
@@ -196,6 +190,27 @@ export default function CreateJobPage() {
     if (!title) { setErrorMessage('Please provide a Job Title.'); return; }
     if (!description) { setErrorMessage('Please provide a Job Description.'); return; }
     if (!companyId || !employerId) { setErrorMessage('Company or Employer account not found. Please re-login.'); return; }
+    if (status === 'published' && !isAdmin) {
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('verified, verification_status')
+        .eq('id', companyId)
+        .maybeSingle();
+
+      if (companyError) {
+        setErrorMessage(`Could not confirm company verification status: ${companyError.message}`);
+        return;
+      }
+
+      const verified =
+        company?.verification_status === 'approved' ||
+        (!company?.verification_status && Boolean(company?.verified));
+      setCompanyVerified(verified);
+      if (!verified) {
+        setErrorMessage('Your company must have an approved business permit before you can publish a job. Submit your permit from Company Profile.');
+        return;
+      }
+    }
 
     setIsLoading(true);
 
@@ -282,6 +297,17 @@ export default function CreateJobPage() {
         {errorMessage && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-4 rounded-2xl flex items-center gap-2 font-semibold">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" /> {errorMessage}
+          </div>
+        )}
+        {!isAdmin && !companyVerified && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-bold">Business permit approval required to publish</p>
+            <p className="mt-1 text-xs leading-relaxed">
+              You can save this job as a draft, but it cannot be published until an administrator approves your company permit.
+            </p>
+            <Link href="/employer/profile" className="mt-2 inline-flex text-xs font-bold text-amber-900 underline">
+              Go to Company Profile to submit your permit
+            </Link>
           </div>
         )}
         {success && (
@@ -540,7 +566,7 @@ export default function CreateJobPage() {
             <Button type="button" variant="outline" onClick={() => handleSubmit('draft')} isLoading={isLoading}>
               Save as Draft
             </Button>
-            <Button type="submit" variant="primary" isLoading={isLoading} className="shadow-md">
+            <Button type="submit" variant="primary" isLoading={isLoading} disabled={!isAdmin && !companyVerified} className="shadow-md">
               Publish Job Opening
             </Button>
           </div>

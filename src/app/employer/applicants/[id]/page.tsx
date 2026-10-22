@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
-import { sendNotification } from '@/lib/notifications';
 import { downloadDocument } from '@/lib/services/resumeService';
 import {
   ArrowLeft,
@@ -22,12 +21,13 @@ import {
   Check,
 } from 'lucide-react';
 
-const STATUS_OPTIONS = [
-  { value: 'applied', label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
-  { value: 'screening', label: 'Under Review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-  { value: 'hired', label: 'Contacted', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  { value: 'rejected', label: 'Rejected', color: 'text-rose-700 bg-rose-50 border-rose-200' },
-];
+import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS, EMPLOYER_STATUS_OPTIONS } from '@/lib/applicationStatus';
+
+const STATUS_OPTIONS = EMPLOYER_STATUS_OPTIONS.map((s) => ({
+  value: s.value,
+  label: s.label,
+  color: APPLICATION_STATUS_COLORS[s.value] || 'text-slate-700 bg-slate-50 border-slate-200',
+}));
 
 export default function EmployerApplicantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -54,6 +54,28 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
       if (channel) supabase.removeChannel(channel);
     };
   }, [resolvedParams.id]);
+
+  useEffect(() => {
+    if (!application?.applicant_id) return;
+    const channel = supabase
+      .channel(`candidate-employment-${application.applicant_id}-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'job_seeker_profiles',
+          filter: `user_id=eq.${application.applicant_id}`,
+        },
+        () => {
+          fetchApplication();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [application?.applicant_id]);
 
   async function fetchApplication() {
     const { data } = await supabase
@@ -99,28 +121,17 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
   const handleStatusChange = async (newStatus: string) => {
     if (!application) return;
     setIsUpdating(true);
-
-    await supabase
-      .from('applications')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', application.id);
-
-    // Notify candidate
-    if (application.applicant_id) {
-      const label = STATUS_OPTIONS.find((s) => s.value === newStatus)?.label || newStatus;
-      await sendNotification({
-        userId: application.applicant_id,
-        type: 'status_update',
-        title: 'Application Status Updated',
-        message: `Your application for ${application.job?.title || 'the position'} is now marked as "${label}".`,
-        link: '/seeker/applications',
-      });
+    const res = await fetch('/api/applications/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId: application.id, status: newStatus }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setApplication((prev: any) => ({ ...prev, status: newStatus }));
+    } else {
+      alert(data.error || 'Could not update status.');
     }
-
-    setApplication((prev: any) => ({ ...prev, status: newStatus }));
     setIsUpdating(false);
   };
 
@@ -150,9 +161,17 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
     );
   }
 
-  const phone = application.applicant?.phone || '+63 917 123 4567';
+  const phone = application.applicant?.phone;
   const email = application.applicant?.email;
-  const currentStatusObj = STATUS_OPTIONS.find((s) => s.value === application.status) || STATUS_OPTIONS[0];
+  const currentStatusObj = STATUS_OPTIONS.find((s) => s.value === application.status) || {
+    value: application.status,
+    label: APPLICATION_STATUS_LABELS[application.status] || application.status,
+    color: APPLICATION_STATUS_COLORS[application.status] || 'text-slate-700 bg-slate-50 border-slate-200',
+  };
+  const seekerProfile = application.applicant?.job_seeker_profile;
+  const hiredElsewhere =
+    seekerProfile?.employment_status === 'hired' && seekerProfile?.hired_application_id !== application.id;
+  const statusLocked = application.status === 'hired' || hiredElsewhere;
 
   return (
     <DashboardLayout
@@ -340,31 +359,41 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
               </span>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Click below to immediately update the status visible to the candidate:
-            </p>
+            {statusLocked ? (
+              <p className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">
+                {hiredElsewhere
+                  ? 'This candidate has already accepted an offer elsewhere. Their application status is locked.'
+                  : 'This hire is confirmed. The application status is locked.'}
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-slate-500">
+                  Click below to immediately update the status visible to the candidate:
+                </p>
 
-            <div className="space-y-2">
-              {STATUS_OPTIONS.map((stg) => {
-                const isActive = application.status === stg.value;
-                return (
-                  <button
-                    key={stg.value}
-                    type="button"
-                    disabled={isUpdating}
-                    onClick={() => handleStatusChange(stg.value)}
-                    className={`w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border cursor-pointer ${
-                      isActive
-                        ? 'bg-[#00b074] text-white border-[#00b074] shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{stg.label}</span>
-                    {isActive && <Check className="w-4 h-4 text-white" />}
-                  </button>
-                );
-              })}
-            </div>
+                <div className="space-y-2">
+                  {STATUS_OPTIONS.map((stg) => {
+                    const isActive = application.status === stg.value;
+                    return (
+                      <button
+                        key={stg.value}
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => handleStatusChange(stg.value)}
+                        className={`w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                          isActive
+                            ? 'bg-[#00b074] text-white border-[#00b074] shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{stg.label}</span>
+                        {isActive && <Check className="w-4 h-4 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

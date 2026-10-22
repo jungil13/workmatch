@@ -23,42 +23,74 @@ export function Navbar() {
   const pathname = usePathname();
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user: currentUser } }) => {
-      if (currentUser) {
-        setUser(currentUser);
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', currentUser.id)
-          .maybeSingle();
+    const syncUser = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-        const meta = currentUser.user_metadata;
-        const firstName =
-          userProfile?.first_name ||
-          meta?.first_name ||
-          currentUser.email?.split('@')[0] ||
-          'User';
-        const lastName = userProfile?.last_name || meta?.last_name || '';
-        const role = userProfile?.role || meta?.role || 'job_seeker';
-        const avatarUrl = userProfile?.avatar_url || meta?.avatar_url || meta?.picture || null;
-
-        setProfile({
-          first_name: firstName,
-          last_name: lastName,
-          avatar_url: avatarUrl,
-          role,
-        });
+      if (!currentUser) {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
       }
+
+      setUser(currentUser);
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      const meta = currentUser.user_metadata;
+      const firstName =
+        userProfile?.first_name ||
+        meta?.first_name ||
+        currentUser.email?.split('@')[0] ||
+        'User';
+      const lastName = userProfile?.last_name || meta?.last_name || '';
+      const role = userProfile?.role || meta?.role || 'job_seeker';
+      const avatarUrl = userProfile?.avatar_url || meta?.avatar_url || meta?.picture || null;
+
+      setProfile({
+        first_name: firstName,
+        last_name: lastName,
+        avatar_url: avatarUrl,
+        role,
+      });
       setLoading(false);
+    };
+
+    syncUser();
+
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setLoading(true);
+        syncUser();
+      }
     });
+
+    return () => {
+      authSubscription?.subscription.unsubscribe();
+    };
   }, []);
 
-  const navLinks = [
-    { name: 'Find Jobs', href: '/jobs' },
-    { name: 'Company Reviews', href: '/reviews' },
-    { name: 'Upload Diploma', href: '/seeker/diploma' },
-    { name: 'AI Matches', href: '/seeker/scanner', badge: 5 },
-  ];
+  const navLinks = user
+    ? [
+        { name: 'Find Jobs', href: '/jobs' },
+        { name: 'Company Reviews', href: '/reviews' },
+        { name: 'Credentials', href: '/seeker/diploma' },
+        { name: 'AI Matches', href: '/seeker/scanner' },
+      ]
+    : [
+        { name: 'Find Jobs', href: '/jobs' },
+        { name: 'Company Reviews', href: '/reviews' },
+      ];
 
   const getDashboardHref = () => {
     if (!profile) return '/seeker/dashboard';
@@ -108,11 +140,7 @@ export function Navbar() {
                     }`}
                   >
                     <span>{link.name}</span>
-                    {link.badge !== undefined && (
-                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
-                        {link.badge}
-                      </span>
-                    )}
+                    {null}
                   </Link>
                 );
               })}
@@ -208,11 +236,7 @@ export function Navbar() {
                     }`}
                   >
                     <span>{link.name}</span>
-                    {link.badge !== undefined && (
-                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
-                        {link.badge}
-                      </span>
-                    )}
+                    {null}
                   </Link>
                 );
               })}

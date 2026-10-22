@@ -4,10 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
-import { trackJobInteraction } from '@/lib/services/jobTrackingService';
 import {
   Users,
-  Eye,
   Sparkles,
   ShieldCheck,
   MapPin,
@@ -18,9 +16,6 @@ import {
   Award,
   ChevronRight,
   ArrowLeft,
-  Star,
-  Search,
-  ExternalLink,
   Target,
 } from 'lucide-react';
 
@@ -35,32 +30,22 @@ interface CandidateItem {
   verifiedDiploma: boolean;
   yearsExp: number;
   city: string;
-  distanceKm: number;
   matchScore: number;
   type: string;
   skills: string[];
   bio: string;
-  isCurrentUser?: boolean;
 }
 
 interface ApplicantStalkerModalProps {
   isOpen: boolean;
   onClose: () => void;
   job: any;
-  currentUserId?: string;
-  currentUserMatchScore?: number;
 }
 
-export function ApplicantStalkerModal({
-  isOpen,
-  onClose,
-  job,
-  currentUserId,
-  currentUserMatchScore = 92,
-}: ApplicantStalkerModalProps) {
+export function ApplicantStalkerModal({ isOpen, onClose, job }: ApplicantStalkerModalProps) {
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'applied' | 'viewed'>('all');
+  const [loadError, setLoadError] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateItem | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
 
@@ -69,21 +54,13 @@ export function ApplicantStalkerModal({
 
     async function loadApplicantsAndVisitors() {
       setLoading(true);
+      setLoadError('');
+      setCandidates([]);
+      setSelectedCandidate(null);
 
       try {
-        // Record current user view for this job in localStorage and database
-        trackJobInteraction(job.id, { userId: currentUserId, source: 'stalker_view' });
-        if (currentUserId) {
-          const viewedKey = `viewed_job_${job.id}`;
-          const currentViews = JSON.parse(localStorage.getItem(viewedKey) || '[]');
-          if (!currentViews.includes(currentUserId)) {
-            currentViews.push(currentUserId);
-            localStorage.setItem(viewedKey, JSON.stringify(currentViews));
-          }
-        }
-
-        // 1. Fetch real applications for this job
-        const { data: realApps } = await supabase
+        // Only people who actually applied are shown; aggregate job views do not identify visitors.
+        const { data: realApps, error } = await supabase
           .from('applications')
           .select(`
             id,
@@ -99,107 +76,7 @@ export function ApplicantStalkerModal({
             )
           `)
           .eq('job_id', job.id);
-
-        // 2. Fetch other job seekers from profiles to provide real candidate directory
-        const { data: allSeekers } = await supabase
-          .from('profiles')
-          .select(`
-            id, first_name, last_name, avatar_url, role,
-            job_seeker_profile:job_seeker_profiles(*),
-            skills:job_seeker_skills(*, skill:skills(*)),
-            educations(*)
-          `)
-          .eq('role', 'job_seeker')
-          .limit(15);
-
-        // Synthesize candidate competitor profiles with realistic scores
-        const sampleCandidatesList: CandidateItem[] = [
-          {
-            id: 'c-1',
-            first_name: 'Mark Lester',
-            last_name: 'Dela Cruz',
-            avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-            title: 'Senior Frontend Engineer',
-            school: 'UP Diliman',
-            degree: 'B.S. Computer Science',
-            verifiedDiploma: true,
-            yearsExp: 5,
-            city: 'Quezon City',
-            distanceKm: 2.8,
-            matchScore: 94,
-            type: 'applied',
-            skills: ['React', 'TypeScript', 'JavaScript', 'Next.js', 'Tailwind CSS', 'Redux'],
-            bio: 'Passionate frontend engineer with 5 years experience specializing in scalable React ecosystems and responsive web performance.',
-          },
-          {
-            id: 'c-2',
-            first_name: 'Angela Marie',
-            last_name: 'Santos',
-            avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-            title: 'React & UI Developer',
-            school: 'Ateneo de Manila University',
-            degree: 'B.S. Information Technology',
-            verifiedDiploma: true,
-            yearsExp: 4,
-            city: 'Taguig / BGC',
-            distanceKm: 8.5,
-            matchScore: 89,
-            type: 'applied',
-            skills: ['React', 'JavaScript', 'Node.js', 'REST APIs', 'CSS3', 'Git'],
-            bio: 'Frontend specialist experienced in design systems, micro-frontends, and accessible user interfaces.',
-          },
-          {
-            id: 'c-3',
-            first_name: 'John Carlo',
-            last_name: 'Reyes',
-            avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-            title: 'Full Stack JavaScript Developer',
-            school: 'De La Salle University',
-            degree: 'B.S. Software Engineering',
-            verifiedDiploma: true,
-            yearsExp: 6,
-            city: 'Makati City',
-            distanceKm: 6.2,
-            matchScore: 86,
-            type: 'applied',
-            skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'AWS', 'Docker'],
-            bio: 'Software engineer building modern web platforms, REST APIs, and cloud infrastructure.',
-          },
-          {
-            id: 'c-4',
-            first_name: 'Patricia Joy',
-            last_name: 'Navarro',
-            avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-            title: 'Frontend Web Developer',
-            school: 'University of Santo Tomas',
-            degree: 'B.S. Information Systems',
-            verifiedDiploma: false,
-            yearsExp: 3,
-            city: 'Manila',
-            distanceKm: 12.0,
-            matchScore: 81,
-            type: 'viewed',
-            skills: ['React', 'JavaScript', 'HTML5', 'Tailwind CSS', 'Figma'],
-            bio: 'UI/UX focused web developer with a keen eye for animations and responsive design.',
-          },
-          {
-            id: 'c-5',
-            first_name: 'Christian Dave',
-            last_name: 'Bautista',
-            avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-            title: 'Software Developer',
-            school: 'Cebu Institute of Technology',
-            degree: 'B.S. Computer Engineering',
-            verifiedDiploma: true,
-            yearsExp: 4,
-            city: 'Cebu City',
-            distanceKm: 3.5,
-            matchScore: 78,
-            type: 'viewed',
-            skills: ['JavaScript', 'Vue.js', 'Node.js', 'MySQL', 'Git'],
-            bio: 'Generalist software developer passionate about building reliable web applications.',
-          },
-        ];
+        if (error) throw new Error(error.message);
 
         // Format real applicants from database if they exist
         const formattedReal: CandidateItem[] = (realApps || []).map((app: any) => {
@@ -213,65 +90,35 @@ export function ApplicantStalkerModal({
             first_name: profile.first_name || 'Applicant',
             last_name: profile.last_name || '',
             avatar_url: profile.avatar_url,
-            title: seeker.professional_title || 'Software Candidate',
-            school: edu?.school_name || 'University Graduate',
-            degree: edu?.degree || 'College Graduate',
-            verifiedDiploma: edu?.verified || true,
-            yearsExp: seeker.years_experience || 3,
-            city: seeker.city || 'Metro Manila',
-            distanceKm: 4.5,
-            matchScore: app.match_score || 88,
+            title: seeker.professional_title || 'Not provided',
+            school: edu?.school_name || 'Not provided',
+            degree: edu?.degree || 'Not provided',
+            verifiedDiploma: Boolean(edu?.verified),
+            yearsExp: Number(seeker.years_experience || 0),
+            city: seeker.city || 'Not provided',
+            matchScore: app.match_score ?? 0,
             type: 'applied',
-            skills: skills.length > 0 ? skills : ['React', 'JavaScript', 'TypeScript'],
-            bio: seeker.bio || 'Verified WorkMatch candidate.',
+            skills,
+            bio: seeker.bio || '',
           };
         });
 
-        // Merge real applicants + catalog candidates
-        const merged: CandidateItem[] = [...formattedReal, ...sampleCandidatesList];
-
-        // Ensure current user is in the list with their actual score to see where they rank
-        if (currentUserId) {
-          const isAlreadyIn = merged.some((c) => c.id === currentUserId);
-          if (!isAlreadyIn) {
-            merged.unshift({
-              id: currentUserId,
-              first_name: 'You',
-              last_name: '(Current Applicant)',
-              avatar_url: null,
-              title: 'Your Profile',
-              school: 'Your Verified Institution',
-              degree: 'Your Degree',
-              verifiedDiploma: true,
-              yearsExp: 4,
-              city: job.city || 'Your Location',
-              distanceKm: 2.5,
-              matchScore: currentUserMatchScore,
-              type: 'viewed',
-              isCurrentUser: true,
-              skills: ['React', 'JavaScript', 'Node.js', 'REST APIs'],
-              bio: 'Your profile as seen in the applicant rankings for this role.',
-            });
-          }
-        }
-
         // Sort descending by match score
-        merged.sort((a, b) => b.matchScore - a.matchScore);
+        formattedReal.sort((a, b) => b.matchScore - a.matchScore);
 
-        setCandidates(merged);
+        setCandidates(formattedReal);
       } catch (err) {
         console.error('Error loading applicant stalker candidates:', err);
+        setLoadError(err instanceof Error ? err.message : 'Could not load applicants.');
       } finally {
         setLoading(false);
       }
     }
 
     loadApplicantsAndVisitors();
-  }, [isOpen, job?.id, currentUserId, currentUserMatchScore]);
+  }, [isOpen, job?.id]);
 
   const filteredCandidates = candidates.filter((c) => {
-    if (activeTab === 'applied' && c.type !== 'applied') return false;
-    if (activeTab === 'viewed' && c.type !== 'viewed' && !c.isCurrentUser) return false;
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
       const matchName = `${c.first_name} ${c.last_name}`.toLowerCase().includes(q);
@@ -281,10 +128,6 @@ export function ApplicantStalkerModal({
     }
     return true;
   });
-
-  const currentUserRank = candidates.findIndex((c) => c.isCurrentUser || c.id === currentUserId) + 1;
-  const totalApplicantsCount = candidates.filter((c) => c.type === 'applied').length;
-  const totalVisitorsCount = Math.max(job?.views || 0, candidates.length, totalApplicantsCount);
 
   return (
     <Modal
@@ -301,13 +144,14 @@ export function ApplicantStalkerModal({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 bg-mint-50 border border-mint-200 px-3 py-0.5 rounded-full text-[11px] font-bold text-mint-800">
-              <Sparkles className="w-3 h-3 text-mint-600" /> Applicant Insights & Stalker Hub
+              <Sparkles className="w-3 h-3 text-mint-600" /> Applicant Insights
             </div>
             <h2 className="text-xl font-black text-dark tracking-tight">
-              Applicants & Visitors for {job?.title}
+              Applicants for {job?.title} ({candidates.length})
             </h2>
             <p className="text-xs text-muted">
-              Inspect candidates who visited or submitted applications for {job?.company?.name || 'this company'}.
+              {candidates.length} {candidates.length === 1 ? 'person has' : 'people have'} applied for this job at{' '}
+              {job?.company?.name || 'this company'}.
             </p>
           </div>
         </div>
@@ -319,7 +163,7 @@ export function ApplicantStalkerModal({
               onClick={() => setSelectedCandidate(null)}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-mint-700 hover:text-mint-800 bg-mint-50 px-3 py-1.5 rounded-xl border border-mint-200 transition-colors"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Competitor Rankings
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Applicants
             </button>
 
             <div className="rounded-3xl border border-border shadow-soft bg-white">
@@ -339,15 +183,6 @@ export function ApplicantStalkerModal({
                     )}
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2 pb-1">
-                    <button className="inline-flex items-center gap-1.5 text-xs font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-xl transition-colors">
-                      <ExternalLink className="w-3 h-3" /> Share
-                    </button>
-                    <button className="inline-flex items-center gap-1.5 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white px-4 py-1.5 rounded-xl transition-colors shadow-sm">
-                      <Star className="w-3 h-3" /> View Profile
-                    </button>
-                  </div>
                 </div>
 
                 {/* Name & meta */}
@@ -361,12 +196,8 @@ export function ApplicantStalkerModal({
                         <ShieldCheck className="w-3 h-3 text-mint-600" /> Verified Diploma
                       </span>
                     )}
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
-                      selectedCandidate.type === 'applied'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}>
-                      {selectedCandidate.type === 'applied' ? '✓ Applied' : 'Viewed'}
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-emerald-50 text-emerald-800 border-emerald-200">
+                      ✓ Applied
                     </span>
                   </div>
                   <p className="text-xs font-semibold text-slate-600">{selectedCandidate.title}</p>
@@ -376,9 +207,6 @@ export function ApplicantStalkerModal({
                     </span>
                     <span className="flex items-center gap-1">
                       <Briefcase className="w-3 h-3 text-slate-400" /> {selectedCandidate.yearsExp} years exp
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Available
                     </span>
                   </div>
                 </div>
@@ -438,38 +266,16 @@ export function ApplicantStalkerModal({
                     </div>
                   </div>
 
-                  {/* Work Experience (synthesized from title + years) */}
+                  {/* Employment history is not available from the application record. */}
                   <div className="space-y-2">
                     <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
                       <Briefcase className="w-3.5 h-3.5 text-mint-600" /> Work Experience
                     </h4>
-                    <div className="space-y-2">
-                      <div className="flex gap-3 p-3 rounded-xl border border-slate-200 bg-white">
-                        <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
-                          <Briefcase className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-dark">{selectedCandidate.title}</p>
-                          <p className="text-[11px] text-slate-500">
-                            {selectedCandidate.yearsExp > 2 ? `${selectedCandidate.yearsExp - 2} – Present` : 'Current'}
-                          </p>
-                          <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{selectedCandidate.bio?.slice(0, 80)}...</p>
-                        </div>
-                      </div>
-                      {selectedCandidate.yearsExp > 2 && (
-                        <div className="flex gap-3 p-3 rounded-xl border border-slate-200 bg-white">
-                          <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                            <Briefcase className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-dark">Software Developer</p>
-                            <p className="text-[11px] text-slate-500">
-                              {selectedCandidate.yearsExp - 2} years · Contract
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-xs text-slate-600">
+                      {selectedCandidate.yearsExp > 0
+                        ? `${selectedCandidate.yearsExp} years reported in profile`
+                        : 'No work experience details provided.'}
+                    </p>
                   </div>
 
                   {/* Education & Certifications */}
@@ -495,17 +301,6 @@ export function ApplicantStalkerModal({
                     </div>
                   </div>
 
-                  {/* AI Competitor Comparison */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-mint-50/80 to-blue-50/50 border border-mint-200 space-y-2">
-                    <span className="text-xs font-bold text-mint-950 flex items-center gap-1.5">
-                      <TrendingUp className="w-4 h-4 text-mint-600" /> AI Competitor Comparison Against You
-                    </span>
-                    <p className="text-xs text-slate-700 leading-relaxed">
-                      {currentUserMatchScore >= selectedCandidate.matchScore
-                        ? `You outrank this candidate by ${currentUserMatchScore - selectedCandidate.matchScore}% due to stronger alignment with the job's core skill requirements and verified diploma.`
-                        : `This candidate currently ranks higher with ${selectedCandidate.matchScore}% match score. Consider taking verified assessments or completing your portfolio credentials to increase your rank.`}
-                    </p>
-                  </div>
                 </div>
 
                 {/* RIGHT column */}
@@ -529,8 +324,8 @@ export function ApplicantStalkerModal({
                     </div>
                   </div>
 
-                  {/* Similar profiles from candidates list */}
-                  <div className="p-3.5 rounded-2xl border border-slate-200 bg-white space-y-3">
+                  {candidates.length > 1 && (
+                    <div className="p-3.5 rounded-2xl border border-slate-200 bg-white space-y-3">
                     <h4 className="text-xs font-black text-dark uppercase tracking-wider flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-mint-600" /> Similar Profiles
                     </h4>
@@ -565,13 +360,8 @@ export function ApplicantStalkerModal({
                           </div>
                         ))}
                     </div>
-                    <button
-                      onClick={() => setSelectedCandidate(null)}
-                      className="text-[11px] font-bold text-mint-700 hover:text-mint-800 hover:underline flex items-center gap-1 pt-1"
-                    >
-                      View More Profiles <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -584,6 +374,11 @@ export function ApplicantStalkerModal({
               <div className="flex items-center justify-center h-40">
                 <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
               </div>
+            ) : loadError ? (
+              <div className="text-center py-10 space-y-2 bg-rose-50 rounded-2xl border border-rose-100">
+                <p className="text-xs font-semibold text-rose-700">Could not load applicants.</p>
+                <p className="text-xs text-rose-600">{loadError}</p>
+              </div>
             ) : filteredCandidates.length === 0 ? (
               <div className="text-center py-10 space-y-2 bg-slate-50 rounded-2xl border border-slate-100">
                 <Users className="w-8 h-8 text-slate-300 mx-auto" />
@@ -592,17 +387,11 @@ export function ApplicantStalkerModal({
             ) : (
               <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
                 {filteredCandidates.map((cand, idx) => {
-                  const isCurrentUser = cand.isCurrentUser || cand.id === currentUserId;
-
                   return (
                     <div
                       key={cand.id || idx}
                       onClick={() => setSelectedCandidate(cand)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
-                        isCurrentUser
-                          ? 'bg-mint-50/80 border-mint-300 ring-2 ring-mint-400/20'
-                          : 'bg-white border-border hover:border-mint-300 hover:bg-slate-50/70 shadow-xs'
-                      }`}
+                      className="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group bg-white border-border hover:border-mint-300 hover:bg-slate-50/70 shadow-xs"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         {/* Rank indicator */}
@@ -634,24 +423,13 @@ export function ApplicantStalkerModal({
                             <span className="text-xs font-bold text-dark group-hover:text-mint-700 transition-colors">
                               {cand.first_name} {cand.last_name}
                             </span>
-                            {isCurrentUser && (
-                              <span className="text-[10px] font-black bg-mint-600 text-white px-2 py-0.2 rounded-full">
-                                YOU
-                              </span>
-                            )}
                             {cand.verifiedDiploma && (
                               <span title="Verified Diploma">
                                 <ShieldCheck className="w-3.5 h-3.5 text-mint-600 shrink-0" />
                               </span>
                             )}
-                            <span
-                              className={`text-[10px] px-2 py-0.2 rounded-full border font-semibold ${
-                                cand.type === 'applied'
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  : 'bg-slate-100 text-slate-600 border-slate-200'
-                              }`}
-                            >
-                              {cand.type === 'applied' ? 'Applied' : 'Viewed'}
+                            <span className="text-[10px] px-2 py-0.2 rounded-full border font-semibold bg-emerald-50 text-emerald-800 border-emerald-200">
+                              Applied
                             </span>
                           </div>
 
@@ -684,9 +462,13 @@ export function ApplicantStalkerModal({
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedCandidate(cand);
+                          }}
                           className="text-xs font-bold text-mint-700 group-hover:bg-mint-50"
                         >
-                          Profile <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                          View Profile <ChevronRight className="w-3.5 h-3.5 ml-1" />
                         </Button>
                       </div>
                     </div>

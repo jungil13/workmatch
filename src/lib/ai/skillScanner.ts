@@ -94,31 +94,21 @@ export function extractEducationFromDiploma(text: string): {
   year?: string;
 } {
   const normalized = text.toLowerCase();
-  
-  let degree = 'Bachelor of Science';
-  if (normalized.includes('master of science') || normalized.includes('ms')) degree = 'Master of Science';
-  else if (normalized.includes('bachelor of arts') || normalized.includes('ba')) degree = 'Bachelor of Arts';
-  else if (normalized.includes('associate')) degree = 'Associate Degree';
-  else if (normalized.includes('diploma') || normalized.includes('certificate')) degree = 'Certificate / Diploma';
+  const result: { school_name?: string; degree?: string; field_of_study?: string; year?: string } = {};
 
-  let field = 'Information Technology';
-  if (normalized.includes('computer science')) field = 'Computer Science';
-  else if (normalized.includes('information systems')) field = 'Information Systems';
-  else if (normalized.includes('software engineering')) field = 'Software Engineering';
-  else if (normalized.includes('computer engineering')) field = 'Computer Engineering';
-  else if (normalized.includes('business administration')) field = 'Business Administration';
+  if (normalized.includes('master of science')) result.degree = 'Master of Science';
+  else if (normalized.includes('bachelor of science')) result.degree = 'Bachelor of Science';
+  else if (normalized.includes('bachelor of arts')) result.degree = 'Bachelor of Arts';
+  else if (normalized.includes('associate')) result.degree = 'Associate Degree';
 
-  let school = 'University of San Carlos';
-  if (normalized.includes('cebu institute of technology') || normalized.includes('cit')) school = 'Cebu Institute of Technology - University';
-  else if (normalized.includes('up') || normalized.includes('university of the philippines')) school = 'University of the Philippines';
-  else if (normalized.includes('ateneo')) school = 'Ateneo de Manila University';
-  else if (normalized.includes('de la salle') || normalized.includes('dlsu')) school = 'De La Salle University';
-  else if (normalized.includes('polytechnic') || normalized.includes('pup')) school = 'Polytechnic University of the Philippines';
+  if (normalized.includes('computer science')) result.field_of_study = 'Computer Science';
+  else if (normalized.includes('information systems')) result.field_of_study = 'Information Systems';
+  else if (normalized.includes('software engineering')) result.field_of_study = 'Software Engineering';
+  else if (normalized.includes('computer engineering')) result.field_of_study = 'Computer Engineering';
+  else if (normalized.includes('business administration')) result.field_of_study = 'Business Administration';
 
-  return {
-    school_name: school,
-    degree,
-    field_of_study: field,
-    year: '2023',
-  };
+  const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+  if (yearMatch) result.year = yearMatch[0];
+
+  return result;
 }

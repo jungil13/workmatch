@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from 'next/font/google';
 import "./globals.css";
+import { WorkMatchAssistant } from '@/components/ai/WorkMatchAssistant';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -28,6 +29,7 @@ export default function RootLayout({
         <div className="flex-1 flex flex-col">
           {children}
         </div>
+        <WorkMatchAssistant />
       </body>
     </html>
   );

@@ -8,7 +8,10 @@ import { Footer } from '@/components/layout/Footer';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { ApplicantStalkerModal } from '@/components/jobs/ApplicantStalkerModal';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { supabase } from '@/lib/supabase/client';
+import { calculateJobMatch } from '@/lib/matching/matchingEngine';
+import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { formatSalaryRange, formatDistance, formatRelativeTime } from '@/lib/utils';
 import {
   Search,
@@ -44,67 +47,11 @@ interface DisplayJob {
   city: string;
   postedAgo: string;
   skills: string[];
-  appliedCount: number;
+  appliedCount: number | null;
   isUrgent?: boolean;
+  canViewApplicants?: boolean;
   rawJob?: any;
 }
-
-const DEFAULT_SHOWCASE_JOBS: DisplayJob[] = [
-  {
-    id: 'demo-job-1',
-    title: 'Senior Frontend Developer',
-    companyName: 'Accenture Philippines',
-    companyInitials: 'AC',
-    badgeBgColor: 'bg-blue-600',
-    matchScore: 95,
-    distanceKm: 2.5,
-    salaryMin: 55000,
-    salaryMax: 80000,
-    salaryCurrency: 'PHP',
-    employmentType: 'Full-time',
-    workArrangement: 'Hybrid',
-    city: 'Taguig, Metro Manila',
-    postedAgo: 'Posted 2 hours ago',
-    skills: ['React', 'TypeScript', 'Node.js', 'AWS'],
-    appliedCount: 12,
-  },
-  {
-    id: 'demo-job-2',
-    title: 'Data Analyst',
-    companyName: 'Globe Telecom',
-    companyInitials: 'GL',
-    badgeBgColor: 'bg-emerald-600',
-    matchScore: 91,
-    distanceKm: 4.2,
-    salaryMin: 45000,
-    salaryMax: 65000,
-    salaryCurrency: 'PHP',
-    employmentType: 'Full-time',
-    workArrangement: 'On-site',
-    city: 'Mandaluyong, Metro Manila',
-    postedAgo: 'Posted 5 hours ago',
-    skills: ['Python', 'SQL', 'Tableau', 'Excel'],
-    appliedCount: 8,
-  },
-  {
-    id: 'demo-job-3',
-    title: 'UX/UI Designer',
-    companyName: 'SM Investments',
-    companyInitials: 'SM',
-    badgeBgColor: 'bg-orange-600',
-    matchScore: 88,
-    distanceKm: 3.1,
-    salaryMin: 50000,
-    salaryMax: 70000,
-    salaryCurrency: 'PHP',
-    employmentType: 'Hybrid',
-    workArrangement: 'Hybrid',
-    city: 'Pasay City, Metro Manila',
-    postedAgo: 'Posted 1 day ago',
-    skills: ['Figma', 'Sketch', 'Adobe XD', 'Prototyping'],
-    appliedCount: 15,
-  },
-];
 
 export default function HomePage() {
   const router = useRouter();
@@ -117,8 +64,10 @@ export default function HomePage() {
   const [activeFilterLocation, setActiveFilterLocation] = useState('');
 
   // Jobs state
-  const [allJobs, setAllJobs] = useState<DisplayJob[]>(DEFAULT_SHOWCASE_JOBS);
+  const [allJobs, setAllJobs] = useState<DisplayJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
   const [selectedJobForApply, setSelectedJobForApply] = useState<any | null>(null);
   const [selectedJobForStalker, setSelectedJobForStalker] = useState<any | null>(null);
@@ -192,6 +141,36 @@ export default function HomePage() {
   useEffect(() => {
     async function loadJobsAndSavedStatus() {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        let candidateData: any = null;
+        let currentRole = '';
+        let employerCompanyId: string | null = null;
+
+        if (user) {
+          setIsSignedIn(true);
+          const [profileRes, employerRes, seekerRes, skillsRes, eduRes, expRes, certRes] = await Promise.all([
+            supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+            supabase.from('employer_profiles').select('company_id').eq('user_id', user.id).maybeSingle(),
+            supabase.from('job_seeker_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+            supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('user_id', user.id),
+            supabase.from('educations').select('*').eq('user_id', user.id),
+            supabase.from('work_experiences').select('*').eq('user_id', user.id),
+            supabase.from('certifications').select('*').eq('user_id', user.id),
+          ]);
+
+          currentRole = profileRes.data?.role || '';
+          employerCompanyId = employerRes.data?.company_id || null;
+          if (profileRes.data?.role === 'job_seeker' && seekerRes.data) {
+            candidateData = {
+              profile: seekerRes.data,
+              skills: skillsRes.data || [],
+              educations: eduRes.data || [],
+              workExperiences: expRes.data || [],
+              certifications: certRes.data || [],
+            };
+          }
+        }
+
         const { data: dbJobs } = await supabase
           .from('jobs')
           .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
@@ -200,6 +179,13 @@ export default function HomePage() {
           .limit(12);
 
         if (dbJobs && dbJobs.length > 0) {
+          let applicantCounts: Record<string, number> = {};
+          try {
+            applicantCounts = await fetchJobApplicantCounts(dbJobs.map((job) => job.id));
+          } catch (error) {
+            console.error('Could not load public job applicant counts:', error);
+          }
+
           const colors = ['bg-blue-600', 'bg-emerald-600', 'bg-orange-600', 'bg-purple-600', 'bg-rose-600', 'bg-indigo-600'];
           const mappedDbJobs: DisplayJob[] = dbJobs.map((j: any, index: number) => {
             const comp = j.company || {};
@@ -212,8 +198,6 @@ export default function HomePage() {
               .join('')
               .toUpperCase() || 'WM';
 
-            const score = 96 - (index * 3); // realistic dynamic match score descending
-
             return {
               id: j.id,
               title: j.title,
@@ -221,34 +205,34 @@ export default function HomePage() {
               companyInitials: initials,
               companyLogo: comp.logo_url,
               badgeBgColor: colors[index % colors.length],
-              matchScore: Math.max(score, 78),
-              distanceKm: Number((2.0 + (index * 0.8)).toFixed(1)),
-              salaryMin: Number(j.salary_min) || 45000,
-              salaryMax: Number(j.salary_max) || 75000,
+              matchScore: candidateData ? calculateJobMatch(j, candidateData).overallScore : 0,
+              distanceKm: 0,
+              salaryMin: Number(j.salary_min) || 0,
+              salaryMax: Number(j.salary_max) || 0,
               salaryCurrency: j.salary_currency || 'PHP',
               employmentType: j.employment_type || 'Full-time',
               workArrangement: j.work_arrangement || 'Hybrid',
-              city: j.city || 'Metro Manila',
+              city: j.city || '',
               postedAgo: j.created_at ? `Posted ${formatRelativeTime(j.created_at)}` : 'Posted recently',
-              skills: skillsList.length > 0 ? skillsList.slice(0, 4) : ['React', 'TypeScript', 'Node.js', 'SQL'],
-              appliedCount: Math.max(j.views ? Math.floor(j.views / 3) : 0, (index + 1) * 2),
+              skills: skillsList.slice(0, 4),
+              appliedCount: applicantCounts[j.id] ?? null,
               isUrgent: !!(j.is_urgent || comp.is_urgent),
-              rawJob: j,
+              canViewApplicants:
+                currentRole === 'admin' ||
+                (currentRole === 'employer' && employerCompanyId === j.company_id),
+              rawJob: {
+                ...j,
+                ...(candidateData ? { match: calculateJobMatch(j, candidateData) } : {}),
+                applicant_count: applicantCounts[j.id],
+              },
             };
           });
-
-          // Ensure we have at least 3 jobs, filling from showcase if needed
-          const combined = [...mappedDbJobs];
-          DEFAULT_SHOWCASE_JOBS.forEach((demo) => {
-            if (!combined.some((item) => item.title.toLowerCase() === demo.title.toLowerCase())) {
-              combined.push(demo);
-            }
-          });
-          setAllJobs(combined);
+          setAllJobs(mappedDbJobs);
+        } else {
+          setAllJobs([]);
         }
 
         // Check user saved jobs
-        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: savedData } = await supabase
             .from('saved_jobs')
@@ -261,6 +245,8 @@ export default function HomePage() {
         }
       } catch (err) {
         console.error('Error fetching jobs for homepage:', err);
+      } finally {
+        setJobsLoading(false);
       }
     }
 
@@ -428,25 +414,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Stats Bar Strip */}
-          <div className="pt-4 sm:pt-6 flex justify-center">
-            <div className="bg-emerald-950/45 backdrop-blur-sm border border-emerald-500/25 rounded-2xl py-3 px-5 sm:px-12 w-full max-w-md sm:max-w-none sm:w-auto inline-flex items-center justify-between sm:justify-center gap-3 sm:gap-14 text-center shadow-lg">
-              <div className="flex-1 sm:flex-none">
-                <p className="text-lg sm:text-2xl font-black text-white leading-none">2,450+</p>
-                <p className="text-[10px] sm:text-[11px] text-emerald-300/80 font-medium mt-0.5">Active Jobs</p>
-              </div>
-              <div className="h-7 w-[1px] bg-emerald-500/30 shrink-0" />
-              <div className="flex-1 sm:flex-none">
-                <p className="text-lg sm:text-2xl font-black text-white leading-none">380+</p>
-                <p className="text-[10px] sm:text-[11px] text-emerald-300/80 font-medium mt-0.5">Companies</p>
-              </div>
-              <div className="h-7 w-[1px] bg-emerald-500/30 shrink-0" />
-              <div className="flex-1 sm:flex-none">
-                <p className="text-lg sm:text-2xl font-black text-white leading-none">15K+</p>
-                <p className="text-[10px] sm:text-[11px] text-emerald-300/80 font-medium mt-0.5">Matches Made</p>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -566,7 +533,9 @@ export default function HomePage() {
           )}
 
           {/* 3-Column Job Cards Grid (Pixel-Matched to Image 1) */}
-          {filteredJobs.length === 0 ? (
+          {jobsLoading ? (
+            <div className="text-center py-16 text-sm text-slate-500">Loading published jobs…</div>
+          ) : filteredJobs.length === 0 ? (
             <div className="text-center py-16 bg-slate-50 rounded-3xl border border-dashed border-slate-200 space-y-3">
               <p className="text-sm font-bold text-slate-700">No jobs match your current search.</p>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
@@ -617,7 +586,10 @@ export default function HomePage() {
                           >
                             {job.title}
                           </Link>
-                          <p className="text-xs text-slate-500 truncate mt-0.5">{job.companyName}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <p className="text-xs text-slate-500 truncate">{job.companyName}</p>
+                            <VerifiedCompanyBadge company={job.rawJob?.company} />
+                          </div>
                         </div>
                       </div>
 
@@ -640,15 +612,24 @@ export default function HomePage() {
                       </button>
                     </div>
 
-                    {/* Match Score & Distance Pill Badges */}
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                        {job.matchScore}% Match
-                      </span>
-                      <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/80">
-                        {formatDistance(job.distanceKm)} away
-                      </span>
+                      {job.matchScore > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                          {job.matchScore}% estimated compatibility
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                          {isSignedIn
+                            ? 'Complete your profile for a personal match score'
+                            : 'Sign in for a personal match score'}
+                        </span>
+                      )}
+                      {job.city && (
+                        <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/80">
+                          {job.city}
+                        </span>
+                      )}
                     </div>
 
                     {/* Job Details Meta (Salary, Employment, Posted Time) */}
@@ -689,31 +670,29 @@ export default function HomePage() {
 
                     {/* Card Footer: Overlapping Avatars + Apply Now Button */}
                     <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                      {/* Top row: Avatar stack + applicants count + See Profiles */}
+                      {/* Real applicant count; profile access is limited to the hiring team. */}
                       <div
-                        className="flex items-center justify-between gap-2 cursor-pointer hover:bg-emerald-50/60 -mx-1 px-1 py-1 rounded-xl transition-all group/stalker"
-                        onClick={() => setSelectedJobForStalker(job.rawJob || job)}
-                        title="View candidates who applied or visited this job"
+                        className={`flex items-center justify-between gap-2 -mx-1 px-1 py-1 rounded-xl transition-all ${
+                          job.canViewApplicants ? 'cursor-pointer hover:bg-emerald-50/60 group/stalker' : ''
+                        }`}
+                        onClick={
+                          job.canViewApplicants
+                            ? () => setSelectedJobForStalker(job.rawJob || job)
+                            : undefined
+                        }
+                        title={job.canViewApplicants ? 'View applicants for this job' : undefined}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="flex -space-x-2 overflow-hidden shrink-0">
-                            <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-                              A
-                            </div>
-                            <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
-                              B
-                            </div>
-                            <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center">
-                              C
-                            </div>
-                          </div>
-                          <span className="text-[11px] text-slate-600 font-semibold truncate">
-                            <strong className="text-slate-800">{job.appliedCount}</strong> people applied
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-bold text-emerald-700 group-hover/stalker:underline flex items-center gap-1 shrink-0">
-                          <Users className="w-3 h-3" /> See Profiles
+                        <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Users className="w-3 h-3 text-emerald-700" />
+                          {job.appliedCount === null
+                            ? 'Applicant count unavailable'
+                            : `${job.appliedCount} ${job.appliedCount === 1 ? 'applicant' : 'applicants'}`}
                         </span>
+                        {job.canViewApplicants && (
+                          <span className="text-[11px] font-bold text-emerald-700 group-hover/stalker:underline flex items-center gap-1 shrink-0">
+                            <Users className="w-3 h-3" /> See Applicants
+                          </span>
+                        )}
                       </div>
 
                       {/* Apply Now Pill Button */}
@@ -756,13 +735,13 @@ export default function HomePage() {
           job={selectedJobForApply}
           isOpen={!!selectedJobForApply}
           onClose={() => setSelectedJobForApply(null)}
-          matchScore={selectedJobForApply.matchScore || selectedJobForApply.match?.overallScore || 90}
+          matchScore={selectedJobForApply.matchScore ?? selectedJobForApply.match?.overallScore ?? 0}
           onSuccess={() => {
             // Update applied count in local state
             setAllJobs((prev) =>
               prev.map((j) =>
                 j.id === selectedJobForApply.id
-                  ? { ...j, appliedCount: j.appliedCount + 1 }
+                  ? { ...j, appliedCount: j.appliedCount === null ? null : j.appliedCount + 1 }
                   : j
               )
             );
@@ -770,14 +749,12 @@ export default function HomePage() {
         />
       )}
 
-      {/* Applicant Stalker Modal (See Profiles) */}
+      {/* Applicant profiles are only loaded for the hiring company or admins. */}
       {selectedJobForStalker && (
         <ApplicantStalkerModal
           isOpen={!!selectedJobForStalker}
           onClose={() => setSelectedJobForStalker(null)}
           job={selectedJobForStalker}
-          currentUserId={undefined}
-          currentUserMatchScore={90}
         />
       )}
     </div>

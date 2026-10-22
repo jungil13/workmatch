@@ -1,35 +1,39 @@
-import { Job, JobSeekerProfile, JobSeekerSkill, Education, WorkExperience } from './database';
+import { JobSeekerProfile, JobSeekerSkill, Education, WorkExperience, Certification } from './database';
 
 export interface MatchFactorBreakdown {
-  name: 'Skills' | 'Experience' | 'Location' | 'Education' | 'Salary' | 'Availability';
-  weight: number; // e.g. 0.40
-  score: number;  // 0 - 100
+  name: string;
+  weight: number;
+  score: number;
   weightedScore: number;
   explanation: string;
   positive: boolean;
 }
 
 export interface MatchResult {
-  overallScore: number; // 0 - 100
+  overallScore: number;
   tier: 'Exceptional' | 'Strong' | 'Good' | 'Moderate' | 'Low';
+  isEstimate: boolean;
   factors: {
-    skills: MatchFactorBreakdown;
+    requiredSkills: MatchFactorBreakdown;
+    preferredSkills: MatchFactorBreakdown;
     experience: MatchFactorBreakdown;
-    location: MatchFactorBreakdown;
     education: MatchFactorBreakdown;
-    salary: MatchFactorBreakdown;
-    availability: MatchFactorBreakdown;
+    certifications: MatchFactorBreakdown;
+    location: MatchFactorBreakdown;
   };
   whyYouMatch: string[];
   growthAreas: string[];
   distanceKm?: number;
   matchedSkillsCount: number;
   totalRequiredSkillsCount: number;
+  matchedSkillNames: string[];
+  missingRequiredSkillNames: string[];
 }
 
 export interface CandidateEvaluationData {
   profile: JobSeekerProfile;
   skills: JobSeekerSkill[];
   educations: Education[];
-  workExperiences: WorkExperience[];
+  workExperiences?: WorkExperience[];
+  certifications?: Certification[];
 }

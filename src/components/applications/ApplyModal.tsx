@@ -257,23 +257,18 @@ export function ApplyModal({
         throw new Error('No resume attached. Please choose or upload a resume.');
       }
 
-      // Submit application to Supabase
-      const { error: appError } = await supabase.from('applications').upsert(
-        {
-          applicant_id: user.id,
-          job_id: job.id,
-          resume_document_id: finalResumeDocId,
-          cover_letter: coverLetter.trim(),
-          match_score: matchScore || 0,
-          status: 'applied',
-          applied_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'job_id,applicant_id' }
-      );
-
-      if (appError) {
-        throw new Error(appError.message || 'Failed to submit application.');
+      const response = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId: job.id,
+          resumeDocumentId: finalResumeDocId,
+          coverLetter: coverLetter.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit application.');
       }
 
       // 1. Notify Employer about the new applicant

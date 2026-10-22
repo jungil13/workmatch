@@ -44,14 +44,21 @@ export function NotificationBell({ portal, className = '' }: NotificationBellPro
 
   useEffect(() => {
     let channel: any = null;
+    let active = true;
 
     async function initNotifications() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setLoading(false);
+        if (active) {
+          setUserId(null);
+          setNotifications([]);
+          setLoading(false);
+        }
         return;
       }
+
       setUserId(user.id);
+      setLoading(true);
 
       // Determine portal from profile if not passed
       let currentPortal = portal;
@@ -70,45 +77,8 @@ export function NotificationBell({ portal, className = '' }: NotificationBellPro
         .order('created_at', { ascending: false })
         .limit(25);
 
-      if (notifs && notifs.length > 0) {
-        setNotifications(notifs);
-      } else {
-        // Starter contextual notification
-        const welcome = {
-          user_id: user.id,
-          type: currentPortal === 'employer' ? 'employer_welcome' : currentPortal === 'admin' ? 'admin_welcome' : 'seeker_welcome',
-          title:
-            currentPortal === 'employer'
-              ? 'Welcome to WorkMatch Recruiter!'
-              : currentPortal === 'admin'
-              ? 'System Command Active'
-              : 'Welcome to WorkMatch!',
-          message:
-            currentPortal === 'employer'
-              ? 'Post open roles and review matched candidate profiles with contact info.'
-              : currentPortal === 'admin'
-              ? 'Real-time database metrics and document review queues are online.'
-              : 'Upload your diploma for verified badge and view top matching jobs.',
-          link:
-            currentPortal === 'employer'
-              ? '/employer/jobs/create'
-              : currentPortal === 'admin'
-              ? '/admin/documents'
-              : '/seeker/find-jobs',
-          is_read: false,
-          created_at: new Date().toISOString(),
-        };
-
-        const { data: created } = await supabase
-          .from('notifications')
-          .insert(welcome)
-          .select()
-          .maybeSingle();
-
-        if (created) {
-          setNotifications([created]);
-        }
-      }
+      if (!active) return;
+      setNotifications(notifs ?? []);
       setLoading(false);
 
       // Realtime subscription
@@ -159,9 +129,28 @@ export function NotificationBell({ portal, className = '' }: NotificationBellPro
         .subscribe();
     }
 
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setUserId(null);
+        setNotifications([]);
+        setLoading(false);
+        if (channel) {
+          supabase.removeChannel(channel);
+          channel = null;
+        }
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        initNotifications();
+      }
+    });
+
     initNotifications();
 
     return () => {
+      active = false;
+      authSubscription?.subscription.unsubscribe();
       if (channel) {
         supabase.removeChannel(channel);
       }
@@ -226,6 +215,8 @@ export function NotificationBell({ portal, className = '' }: NotificationBellPro
       case 'diploma':
       case 'verified':
         return <GraduationCap className="w-4 h-4 text-emerald-700" />;
+      case 'company_verification':
+        return <FileCheck className="w-4 h-4 text-emerald-700" />;
       default:
         return <Info className="w-4 h-4 text-slate-500" />;
     }

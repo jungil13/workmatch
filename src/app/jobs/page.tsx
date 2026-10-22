@@ -8,6 +8,8 @@ import { Footer } from '@/components/layout/Footer';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { supabase } from '@/lib/supabase/client';
+import { calculateJobMatch } from '@/lib/matching/matchingEngine';
+import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { formatSalaryRange, formatRelativeTime } from '@/lib/utils';
 import {
   Search,
@@ -18,6 +20,7 @@ import {
   ChevronRight,
   Flame,
 } from 'lucide-react';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 
 const JOBS_PER_PAGE = 10;
 
@@ -61,6 +64,8 @@ export default function PublicJobsPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
+  const [candidateData, setCandidateData] = useState<any | null>(null);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -68,12 +73,31 @@ export default function PublicJobsPage() {
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
   const [selectedJobForApply, setSelectedJobForApply] = useState<any | null>(null);
 
-  // Load user data (for saved jobs)
+  // Load user data for saved jobs and personalized matches.
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
-      const { data: saved } = await supabase.from('saved_jobs').select('job_id').eq('user_id', user.id);
+      setIsSignedIn(true);
+      const [savedRes, profileRes, seekerRes, skillsRes, eduRes, expRes, certRes] = await Promise.all([
+        supabase.from('saved_jobs').select('job_id').eq('user_id', user.id),
+        supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+        supabase.from('job_seeker_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('user_id', user.id),
+        supabase.from('educations').select('*').eq('user_id', user.id),
+        supabase.from('work_experiences').select('*').eq('user_id', user.id),
+        supabase.from('certifications').select('*').eq('user_id', user.id),
+      ]);
+      const saved = savedRes.data;
       if (saved) setSavedJobIds(saved.map((s: any) => s.job_id));
+      if (profileRes.data?.role === 'job_seeker' && seekerRes.data) {
+        setCandidateData({
+          profile: seekerRes.data,
+          skills: skillsRes.data || [],
+          educations: eduRes.data || [],
+          workExperiences: expRes.data || [],
+          certifications: certRes.data || [],
+        });
+      }
     });
   }, []);
 
@@ -108,11 +132,27 @@ export default function PublicJobsPage() {
       .order('created_at', { ascending: sortBy === 'recent' })
       .range(from, to);
 
-    const { data, count } = await query;
-    setJobs(data ?? []);
+    const { data, count, error } = await query;
+    if (error) {
+      console.error('Could not load job listings:', error);
+    }
+    const rows = data ?? [];
+    let applicantCounts: Record<string, number> = {};
+    try {
+      applicantCounts = await fetchJobApplicantCounts(rows.map((job) => job.id));
+    } catch (error) {
+      console.error('Could not load job applicant counts:', error);
+    }
+    setJobs(
+      rows.map((job) => ({
+        ...job,
+        match: candidateData ? calculateJobMatch(job, candidateData) : null,
+        applicantCount: applicantCounts[job.id] ?? null,
+      }))
+    );
     setTotalCount(count ?? 0);
     setLoading(false);
-  }, [page, activeKeyword, activeLocation, activeJobTypes, activeSalaryMin, activeSalaryMax, sortBy]);
+  }, [page, activeKeyword, activeLocation, activeJobTypes, activeSalaryMin, activeSalaryMax, sortBy, candidateData]);
 
   useEffect(() => {
     fetchJobs();
@@ -172,12 +212,6 @@ export default function PublicJobsPage() {
       .map((w) => w[0])
       .join('')
       .toUpperCase();
-  };
-
-  const getMatchScore = (job: any, idx: number) => {
-    // Generate an authentic match percentage
-    const base = job.views ? Math.min(96, 75 + Math.floor(job.views / 2)) : 95 - idx * 4;
-    return Math.max(68, Math.min(98, base));
   };
 
   return (
@@ -386,14 +420,12 @@ export default function PublicJobsPage() {
             ) : (
               <div className="space-y-4">
                 {jobs.map((job, idx) => {
-                  const matchScore = getMatchScore(job, idx);
+                  const matchScore = job.match?.overallScore ?? null;
                   const company = job.company || {};
                   const skills = (job.required_skills || [])
                     .slice(0, 4)
                     .map((sk: any) => sk.skill?.name || sk.name);
                   const colorClass = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-                  const appliedCount = job.views ? Math.max(Math.floor(job.views / 3), 4) : 30;
-                  const maxApplicants = appliedCount + 20;
                   const isUrgent = job.is_urgent || company.is_urgent;
 
                   return (
@@ -435,10 +467,13 @@ export default function PublicJobsPage() {
                             )}
                           </div>
 
-                          {/* Company • City */}
-                          <p className="text-xs text-slate-500 font-normal">
-                            {company.name || 'Company'} · {job.city || 'Remote'}
-                          </p>
+                          {/* Company • City + Verified Badge */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs text-slate-500 font-normal">
+                              {company.name || 'Company'} · {job.city || 'Remote'}
+                            </p>
+                            <VerifiedCompanyBadge company={company} />
+                          </div>
 
                           {/* Skills Pills */}
                           {skills.length > 0 && (
@@ -469,7 +504,9 @@ export default function PublicJobsPage() {
                             </span>
                             <span className="flex items-center gap-1">
                               <Users className="w-3 h-3 text-slate-400" />
-                              {appliedCount} / {maxApplicants} applicants
+                              {job.applicantCount === null
+                                ? 'Applicant count unavailable'
+                                : `${job.applicantCount} ${job.applicantCount === 1 ? 'applicant' : 'applicants'}`}
                             </span>
                           </div>
 
@@ -484,16 +521,22 @@ export default function PublicJobsPage() {
                       <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         {/* Match Score */}
                         <div className="text-center sm:text-right">
-                          <div
-                            className={`text-xl font-extrabold leading-none ${
-                              matchScore >= 85 ? 'text-[#00b074]' : 'text-amber-500'
-                            }`}
-                          >
-                            {matchScore}%
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-medium tracking-tight">
-                            Match
-                          </span>
+                          {matchScore === null ? (
+                            <span className="text-[10px] text-slate-400 font-medium tracking-tight">
+                              {isSignedIn ? 'Complete your profile for a match' : 'Sign in for a personal match'}
+                            </span>
+                          ) : (
+                            <>
+                              <div
+                                className={`text-xl font-extrabold leading-none ${
+                                  matchScore >= 85 ? 'text-[#00b074]' : 'text-amber-500'
+                                }`}
+                              >
+                                {matchScore}%
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium tracking-tight">Match</span>
+                            </>
+                          )}
                         </div>
 
                         {/* Apply Now Dark Button */}
@@ -608,7 +651,7 @@ export default function PublicJobsPage() {
           job={selectedJobForApply}
           isOpen={!!selectedJobForApply}
           onClose={() => setSelectedJobForApply(null)}
-          matchScore={90}
+          matchScore={0}
           onSuccess={() => setSelectedJobForApply(null)}
         />
       )}

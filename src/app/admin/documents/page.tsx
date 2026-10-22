@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { supabase } from '@/lib/supabase/client';
-import { sendNotification } from '@/lib/notifications';
+import { SignedDocumentImage, SignedDocumentLink } from '@/components/documents/SignedDocumentLink';
 import { VerificationStatus } from '@/types/database';
 import {
   GraduationCap,
@@ -18,6 +17,7 @@ import {
   FileText,
   AlertCircle,
   ZoomIn,
+  Trash2,
 } from 'lucide-react';
 
 export default function AdminDocumentsQueuePage() {
@@ -28,25 +28,40 @@ export default function AdminDocumentsQueuePage() {
   const [reviewNotes, setReviewNotes] = useState('Registrar seal and graduate records verified.');
   const [statusAction, setStatusAction] = useState<VerificationStatus>('verified');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    fetchDocuments();
+    void fetchDocuments();
   }, []);
 
   async function fetchDocuments() {
-    const { data } = await supabase
-      .from('documents')
-      .select('*, profile:profiles(first_name, last_name, email)')
-      .order('uploaded_at', { ascending: false });
-    setDocuments(data ?? []);
-    setLoading(false);
-  }
+    setLoading(true);
+    setErrorMessage('');
+    try {
+      const response = await fetch('/api/admin/documents');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load documents.');
 
-  const getDocumentUrl = (filePath: string) => {
-    if (!filePath) return '';
-    const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
-    return data.publicUrl;
-  };
+      const loadedDocuments = result.documents ?? [];
+      setDocuments(loadedDocuments);
+      const documentId = new URLSearchParams(window.location.search).get('documentId');
+      if (documentId) {
+        const targetDocument = loadedDocuments.find((document: any) => document.id === documentId);
+        if (targetDocument?.verification_status === 'pending') {
+          handleOpenReview(targetDocument, 'verified');
+        } else if (!targetDocument) {
+          setErrorMessage('The selected document was not found in the verification queue.');
+        }
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not load documents.');
+      setDocuments([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const isImageDocument = (doc: any) => {
     const mime = doc.mime_type || '';
@@ -68,38 +83,54 @@ export default function AdminDocumentsQueuePage() {
     e.preventDefault();
     if (!selectedDoc) return;
 
-    await supabase
-      .from('documents')
-      .update({
-        verification_status: statusAction,
-        verification_notes: reviewNotes,
-        verified_at: new Date().toISOString(),
-      })
-      .eq('id', selectedDoc.id);
-
-    // Notify applicant about verification result
-    if (selectedDoc.user_id) {
-      await sendNotification({
-        userId: selectedDoc.user_id,
-        type: statusAction === 'verified' ? 'verified' : 'document',
-        title: statusAction === 'verified' ? 'Diploma Verified!' : 'Diploma Verification Update',
-        message: statusAction === 'verified'
-          ? 'Congratulations! Your college degree has been approved and verified by admin. You now have the Verified Candidate badge.'
-          : `Your diploma verification was rejected. Reason: ${reviewNotes || 'Please upload a clear scan.'}`,
-        link: '/seeker/diploma',
+    setSaving(true);
+    setErrorMessage('');
+    try {
+      const response = await fetch('/api/admin/verify-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: selectedDoc.id,
+          status: statusAction,
+          notes: reviewNotes,
+        }),
       });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update document status.');
+
+      setSelectedDoc(null);
+      await fetchDocuments();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not update document status.');
+    } finally {
+      setSaving(false);
     }
+  };
 
-    await supabase.from('audit_logs').insert({
-      action: `Admin verified document as ${statusAction}`,
-      entity_type: 'document',
-      entity_id: selectedDoc.id,
-      metadata: { file_name: selectedDoc.file_name, status: statusAction, notes: reviewNotes },
-      created_at: new Date().toISOString(),
-    });
+  const handleDeleteDocument = async (doc: any) => {
+    if (!window.confirm(`Permanently delete ${doc.file_name} and its uploaded file?`)) return;
 
-    setSelectedDoc(null);
-    fetchDocuments();
+    setDeletingId(doc.id);
+    setErrorMessage('');
+    try {
+      const response = await fetch('/api/admin/documents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not delete the document.');
+
+      if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+      await fetchDocuments();
+      if (result.warnings?.length) {
+        setErrorMessage(result.warnings.join(' '));
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not delete the document.');
+    } finally {
+      setDeletingId('');
+    }
   };
 
   return (
@@ -109,6 +140,11 @@ export default function AdminDocumentsQueuePage() {
       subtitle="Examine diploma and credential scans to verify degrees and award high-trust badges."
     >
       <div className="space-y-6 max-w-7xl">
+        {errorMessage && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+            {errorMessage}
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center h-40">
             <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />
@@ -116,13 +152,16 @@ export default function AdminDocumentsQueuePage() {
         ) : documents.length === 0 ? (
           <div className="bg-white rounded-3xl border border-border p-12 text-center space-y-3">
             <GraduationCap className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-dark">No documents uploaded yet</h3>
-            <p className="text-xs text-muted">When candidates upload credentials for verification, they will appear here.</p>
+            <h3 className="text-base font-bold text-dark">
+              {errorMessage ? 'Document queue unavailable' : 'No documents uploaded yet'}
+            </h3>
+            {!errorMessage && (
+              <p className="text-xs text-muted">When candidates upload credentials for verification, they will appear here.</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {documents.map((doc) => {
-              const docUrl = getDocumentUrl(doc.file_path);
               const isImg = isImageDocument(doc);
 
               return (
@@ -139,7 +178,7 @@ export default function AdminDocumentsQueuePage() {
                         </div>
                         <div>
                           <h4 className="text-xs font-bold text-dark">
-                            {doc.profile ? `${doc.profile.first_name} ${doc.profile.last_name}` : 'Candidate'}
+                            {doc.profile ? `${doc.profile.first_name || ''} ${doc.profile.last_name || ''}`.trim() || 'Candidate' : 'Candidate'}
                           </h4>
                           <p className="text-[11px] text-muted truncate max-w-[150px]">
                             {doc.profile?.email || 'Registered Seeker'}
@@ -166,49 +205,24 @@ export default function AdminDocumentsQueuePage() {
                     <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 group aspect-[16/10] flex items-center justify-center">
                       {isImg ? (
                         <>
-                          <img
-                            src={docUrl}
-                            alt={doc.file_name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              // If image fails to load, fallback to placeholder
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
+                          <SignedDocumentImage documentId={doc.id} alt={doc.file_name} />
                           <div className="absolute inset-0 bg-dark/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPreviewImageUrl(docUrl);
-                                setPreviewDocTitle(doc.file_name);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-white/90 text-dark text-xs font-bold flex items-center gap-1.5 hover:bg-white shadow-md transition-transform active:scale-95"
-                            >
-                              <ZoomIn className="w-3.5 h-3.5 text-mint-600" /> Zoom Scan
-                            </button>
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded-xl bg-white/90 text-dark hover:bg-white shadow-md transition-transform"
-                              title="Open original in new tab"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
+                            <SignedDocumentLink
+                              documentId={doc.id}
+                              label="Open scan"
+                              className="px-3 py-1.5 rounded-xl bg-white/90 text-dark text-xs font-bold"
+                            />
                           </div>
                         </>
                       ) : (
                         <div className="text-center p-6 space-y-2 text-white">
                           <FileText className="w-10 h-10 text-mint-400 mx-auto" />
                           <p className="text-xs font-bold">{doc.file_name}</p>
-                          <a
-                            href={docUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <SignedDocumentLink
+                            documentId={doc.id}
+                            label="Open Document (PDF)"
                             className="inline-flex items-center gap-1 text-[11px] font-bold text-mint-400 hover:underline"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" /> Open Document (PDF)
-                          </a>
+                          />
                         </div>
                       )}
                     </div>
@@ -226,6 +240,9 @@ export default function AdminDocumentsQueuePage() {
                       <p className="text-[11px] text-muted">
                         Uploaded on {new Date(doc.uploaded_at).toLocaleDateString()} at {new Date(doc.uploaded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
+                      <p className="text-[11px] text-muted capitalize">
+                        {String(doc.document_type || 'document').replaceAll('_', ' ')} · Status: {String(doc.verification_status || 'pending').replaceAll('_', ' ')}
+                      </p>
                     </div>
 
                     {doc.verification_notes && (
@@ -238,6 +255,16 @@ export default function AdminDocumentsQueuePage() {
 
                   {/* Actions / Verified Status Banner */}
                   <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={Boolean(deletingId) || saving}
+                      isLoading={deletingId === doc.id}
+                      onClick={() => void handleDeleteDocument(doc)}
+                      className="text-rose-700 border-rose-200 hover:bg-rose-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </Button>
                     {doc.verification_status === 'verified' ? (
                       <div className="w-full py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs">
                         <CheckCircle2 className="w-4 h-4 text-[#00b074]" /> Approved &amp; Verified
@@ -285,11 +312,9 @@ export default function AdminDocumentsQueuePage() {
           {selectedDoc && (
             <div className="rounded-2xl border border-border p-3 bg-slate-50 flex items-center gap-3">
               {isImageDocument(selectedDoc) ? (
-                <img
-                  src={getDocumentUrl(selectedDoc.file_path)}
-                  alt={selectedDoc.file_name}
-                  className="w-14 h-14 object-cover rounded-xl border border-border shrink-0"
-                />
+                <div className="w-14 h-14 rounded-xl overflow-hidden border border-border shrink-0">
+                  <SignedDocumentImage documentId={selectedDoc.id} alt={selectedDoc.file_name} />
+                </div>
               ) : (
                 <div className="w-14 h-14 rounded-xl bg-mint-50 text-mint-600 flex items-center justify-center shrink-0">
                   <GraduationCap className="w-6 h-6" />
@@ -323,8 +348,9 @@ export default function AdminDocumentsQueuePage() {
               type="submit"
               variant={statusAction === 'verified' ? 'primary' : 'danger'}
               size="md"
+              disabled={saving}
             >
-              Confirm {statusAction === 'verified' ? 'Verification' : 'Rejection'}
+              {saving ? 'Saving...' : `Confirm ${statusAction === 'verified' ? 'Verification' : 'Rejection'}`}
             </Button>
           </div>
         </form>

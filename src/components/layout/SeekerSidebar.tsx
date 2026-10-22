@@ -81,7 +81,7 @@ export function SeekerSidebar() {
     { name: 'AI Job Recommendations', href: '/seeker/scanner', icon: Sparkles },
     { name: 'Saved Jobs', href: '/seeker/saved-jobs', icon: Bookmark },
     { name: 'Applications', href: '/seeker/applications', icon: FileCheck },
-    { name: 'Diploma Verification', href: '/seeker/diploma', icon: GraduationCap },
+    { name: 'Credentials', href: '/seeker/diploma', icon: GraduationCap },
     { name: 'My Profile', href: '/seeker/profile', icon: User },
     { name: 'Company Reviews', href: '/seeker/reviews', icon: Star },
     { name: 'Settings', href: '/seeker/settings', icon: Settings },

@@ -1,18 +1,36 @@
 import { supabase } from '@/lib/supabase/client';
 
-export interface ApplicantPreview {
-  id: string;
-  name: string;
-  avatarUrl?: string | null;
-  initials: string;
-  matchScore: number;
-}
-
 export interface JobEngagementStats {
   views: number;
-  applicantsCount: number;
-  estimatedRank: number;
-  recentApplicants: ApplicantPreview[];
+  applicantsCount: number | null;
+}
+
+export async function fetchJobApplicantCounts(jobIds: string[]): Promise<Record<string, number>> {
+  const uniqueJobIds = [...new Set(jobIds)].filter(Boolean);
+  if (uniqueJobIds.length === 0) return {};
+
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < uniqueJobIds.length; i += 20) {
+    const response = await fetch('/api/jobs/applicant-counts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobIds: uniqueJobIds.slice(i, i + 20) }),
+    });
+    const result = await response.json();
+    if (
+      !response.ok ||
+      !result.counts ||
+      typeof result.counts !== 'object' ||
+      Array.isArray(result.counts)
+    ) {
+      throw new Error(result.error || 'Could not load applicant counts.');
+    }
+    Object.assign(
+      counts,
+      Object.fromEntries(Object.entries(result.counts).map(([jobId, count]) => [jobId, Number(count)]))
+    );
+  }
+  return counts;
 }
 
 /**
@@ -101,91 +119,31 @@ export async function trackJobInteraction(
 /**
  * Fetches real live engagement statistics for a job:
  * - Real views/visits count from jobs table
- * - Real applicants count from applications table
- * - Top applicant avatars/initials
- * - Real calculated rank based on applicant scores
+ * - Real applicant count from the server-side aggregate endpoint
  */
 export async function fetchJobEngagementStats(
   jobId: string,
-  initialViews: number = 0,
-  candidateMatchScore: number = 90
+  initialViews: number = 0
 ): Promise<JobEngagementStats> {
   if (!jobId) {
     return {
       views: initialViews,
       applicantsCount: 0,
-      estimatedRank: 1,
-      recentApplicants: [],
     };
   }
 
-  try {
-    // Run parallel queries: fetch applications and current job views
-    const [appsRes, jobRes] = await Promise.all([
-      supabase
-        .from('applications')
-        .select(`
-          id,
-          applicant_id,
-          match_score,
-          applicant:profiles(
-            id,
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `, { count: 'exact' })
-        .eq('job_id', jobId),
-      supabase
-        .from('jobs')
-        .select('views')
-        .eq('id', jobId)
-        .maybeSingle(),
-    ]);
+  const [jobRes, counts] = await Promise.all([
+    supabase.from('jobs').select('views').eq('id', jobId).maybeSingle(),
+    fetchJobApplicantCounts([jobId]),
+  ]);
 
-    const apps = appsRes.data || [];
-    const applicantsCount = appsRes.count ?? apps.length;
+  if (jobRes.error) throw new Error(`Could not load job views: ${jobRes.error.message}`);
 
-    // View count from database or initial fallback
-    const dbViews = typeof jobRes.data?.views === 'number' ? jobRes.data.views : initialViews;
-    // Views should at least equal applicants (since one must visit to apply)
-    const totalViews = Math.max(dbViews, applicantsCount);
+  const applicantsCount = counts[jobId] ?? 0;
+  const dbViews = typeof jobRes.data?.views === 'number' ? jobRes.data.views : initialViews;
 
-    // Calculate real rank based on actual applicants' match scores
-    const applicantScores = apps.map((a: any) => Number(a.match_score) || 75);
-    const higherScoresCount = applicantScores.filter((score) => score > candidateMatchScore).length;
-    const estimatedRank = higherScoresCount + 1;
-
-    // Extract recent applicant previews with avatars or initials
-    const recentApplicants: ApplicantPreview[] = apps.slice(0, 3).map((a: any) => {
-      const profile = a.applicant || {};
-      const fName = profile.first_name || '';
-      const lName = profile.last_name || '';
-      const fullName = `${fName} ${lName}`.trim() || 'Applicant';
-      const initials = (fName[0] || 'C') + (lName[0] || '');
-
-      return {
-        id: a.applicant_id || a.id,
-        name: fullName,
-        avatarUrl: profile.avatar_url || null,
-        initials: initials.toUpperCase(),
-        matchScore: Number(a.match_score) || 80,
-      };
-    });
-
-    return {
-      views: totalViews,
-      applicantsCount,
-      estimatedRank,
-      recentApplicants,
-    };
-  } catch (err) {
-    console.error('Error fetching job engagement stats:', err);
-    return {
-      views: initialViews,
-      applicantsCount: 0,
-      estimatedRank: 1,
-      recentApplicants: [],
-    };
-  }
+  return {
+    views: dbViews,
+    applicantsCount,
+  };
 }

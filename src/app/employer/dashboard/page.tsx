@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
-import { Briefcase, Users, Calendar, Award, PlusCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { Briefcase, Users, Calendar, Award, PlusCircle, ArrowRight, ShieldCheck, AlertCircle, Clock, ShieldOff } from 'lucide-react';
 
 export default function EmployerDashboardPage() {
   const [stats, setStats] = useState({ totalJobs: 0, activeJobs: 0, totalApplicants: 0, interviewsCount: 0, offersCount: 0, hiredCount: 0, screeningCount: 0 });
   const [recentApps, setRecentApps] = useState<any[]>([]);
   const [companyId, setCompanyId] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState<string>('unverified');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,10 @@ export default function EmployerDashboardPage() {
       const { data: ep } = await supabase.from('employer_profiles').select('company_id').eq('user_id', user.id).maybeSingle();
       if (!ep?.company_id) { setLoading(false); return; }
       setCompanyId(ep.company_id);
+      const { data: company } = await supabase.from('companies').select('verification_status, verified').eq('id', ep.company_id).maybeSingle();
+      if (company) {
+        setVerificationStatus(company.verification_status || (company.verified ? 'approved' : 'unverified'));
+      }
       fetchStats(ep.company_id);
     });
   }, []);
@@ -57,7 +62,54 @@ export default function EmployerDashboardPage() {
         </Link>
       }
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Verification Status Banner */}
+        {!loading && (
+          verificationStatus === 'approved' ? (
+            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3.5">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-emerald-900">Company Verified ✓</p>
+                <p className="text-xs text-emerald-700">Your business permit has been approved. You can post and publish jobs.</p>
+              </div>
+            </div>
+          ) : verificationStatus === 'pending' ? (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5">
+              <Clock className="w-5 h-5 text-amber-600 shrink-0 animate-pulse" />
+              <div>
+                <p className="text-sm font-bold text-amber-900">Verification Pending</p>
+                <p className="text-xs text-amber-700">Your business permit is under admin review. You can save job drafts but cannot publish until approved.</p>
+              </div>
+            </div>
+          ) : verificationStatus === 'rejected' || verificationStatus === 'resubmission_required' ? (
+            <div className="flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-5 py-3.5">
+              <div className="flex items-center gap-3">
+                <ShieldOff className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-rose-900">{verificationStatus === 'resubmission_required' ? 'Resubmission Required' : 'Verification Rejected'}</p>
+                  <p className="text-xs text-rose-700">Please go to Company Profile to re-upload your business permit with clearer documents.</p>
+                </div>
+              </div>
+              <Link href="/employer/profile">
+                <Button variant="outline" size="sm" className="text-rose-700 border-rose-300 hover:bg-rose-100 shrink-0">Update Permit</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-3.5">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-blue-900">Business Permit Required</p>
+                  <p className="text-xs text-blue-700">Upload your business permit in Company Profile so an admin can verify your company to enable job publishing.</p>
+                </div>
+              </div>
+              <Link href="/employer/profile">
+                <Button variant="primary" size="sm" className="shrink-0">Submit Permit</Button>
+              </Link>
+            </div>
+          )
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center h-40">
             <div className="w-8 h-8 border-4 border-mint-500 border-t-transparent rounded-full animate-spin" />

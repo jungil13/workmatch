@@ -1,6 +1,6 @@
 -- ============================================================
 -- WORKMATCH: Migration 04
--- Expanded Skills Taxonomy + Mock Job Data
+-- Expanded Skills Taxonomy + Optional Demo Data
 -- ============================================================
 
 -- ============================================================
@@ -190,11 +190,12 @@ ON CONFLICT (name) DO NOTHING;
 
 
 -- ============================================================
--- PART C: Seed Mock Companies
+-- PART C: Optional demo companies (disabled unless explicitly enabled)
 -- ============================================================
 
 DO $$
 BEGIN
+  IF current_setting('workmatch.include_demo_data', true) = 'true' THEN
   INSERT INTO public.companies (id, name, slug, description, industry, website, city, province, latitude, longitude, verified)
   VALUES (
     '11111111-0000-0000-0000-000000000001',
@@ -271,11 +272,12 @@ BEGIN
     'https://officeflowmanila.com',
     'Manila', 'Metro Manila', 14.5995, 120.9842, true
   ) ON CONFLICT (slug) DO NOTHING;
+  END IF;
 END $$;
 
 
 -- ============================================================
--- PART D: Seed Mock Jobs + Job Skills
+-- PART D: Optional demo employer, jobs, and job skills (disabled by default)
 -- ============================================================
 
 DO $$
@@ -308,6 +310,7 @@ DECLARE
   s_communication UUID; s_attention UUID;
   s_problem_solving UUID; s_teamwork UUID; s_time_mgmt UUID;
 BEGIN
+  IF current_setting('workmatch.include_demo_data', true) = 'true' THEN
   -- Resolve employer_id
   SELECT id INTO v_employer_id FROM public.profiles WHERE role IN ('employer', 'admin') LIMIT 1;
   IF v_employer_id IS NULL THEN
@@ -679,5 +682,5 @@ BEGIN
     ('aaaaaaaa-0000-0000-0000-000000000014', s_attention, true, 3),
     ('aaaaaaaa-0000-0000-0000-000000000014', s_time_mgmt, true, 3)
   ON CONFLICT (job_id, skill_id) DO NOTHING;
-
+  END IF;
 END $$;

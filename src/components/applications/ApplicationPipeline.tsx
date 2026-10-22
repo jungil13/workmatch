@@ -1,7 +1,8 @@
 import React from 'react';
 import { ApplicationStatus } from '@/types/database';
-import { CheckCircle2, Circle, Clock, Check, XCircle } from 'lucide-react';
+import { Check, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { APPLICATION_STATUS_LABELS, PIPELINE_STAGES } from '@/lib/applicationStatus';
 
 interface ApplicationPipelineProps {
   currentStatus: ApplicationStatus;
@@ -9,11 +10,7 @@ interface ApplicationPipelineProps {
 }
 
 export function ApplicationPipeline({ currentStatus, statusHistory = [] }: ApplicationPipelineProps) {
-  const stages: Array<{ key: ApplicationStatus; label: string }> = [
-    { key: 'applied', label: 'Applied' },
-    { key: 'screening', label: 'Under Review' },
-    { key: 'hired', label: 'Contacted' },
-  ];
+  const stages = PIPELINE_STAGES.map((key) => ({ key, label: APPLICATION_STATUS_LABELS[key] }));
 
   if (currentStatus === 'rejected') {
     return (

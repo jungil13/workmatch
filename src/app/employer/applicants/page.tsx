@@ -6,7 +6,6 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { supabase } from '@/lib/supabase/client';
-import { sendNotification } from '@/lib/notifications';
 import { downloadDocument } from '@/lib/services/resumeService';
 import {
   Users,
@@ -24,9 +23,14 @@ import {
 const STATUS_OPTIONS = [
   { value: 'applied', label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
   { value: 'screening', label: 'Under Review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-  { value: 'hired', label: 'Contacted', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { value: 'shortlisted', label: 'Shortlisted', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
+  { value: 'interview', label: 'Interview', color: 'text-violet-700 bg-violet-50 border-violet-200' },
+  { value: 'offer', label: 'Offer', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { value: 'hired', label: 'Hired', color: 'text-emerald-800 bg-emerald-100 border-emerald-300' },
   { value: 'rejected', label: 'Rejected', color: 'text-rose-700 bg-rose-50 border-rose-200' },
+  { value: 'closed', label: 'Closed', color: 'text-slate-700 bg-slate-100 border-slate-300' },
 ];
+const EMPLOYER_ACTION_STATUSES = STATUS_OPTIONS.filter((status) => status.value !== 'hired');
 
 export default function EmployerApplicantsPage() {
   const [applications, setApplications] = useState<any[]>([]);
@@ -57,6 +61,29 @@ export default function EmployerApplicantsPage() {
     };
   }, []);
 
+  const applicantProfileIds = Array.from(new Set(
+    applications.map((application) => application.applicant?.id).filter(Boolean)
+  )).sort();
+  const applicantProfileIdsKey = applicantProfileIds.join(',');
+
+  useEffect(() => {
+    if (!applicantProfileIds.length) return;
+    const channel = supabase.channel(`candidate-employment-${Date.now()}`);
+    applicantProfileIds.forEach((userId) => {
+      channel.on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'job_seeker_profiles', filter: `user_id=eq.${userId}` },
+        () => {
+          fetchApplications();
+        }
+      );
+    });
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [applicantProfileIdsKey]);
+
   async function fetchApplications() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -83,7 +110,7 @@ export default function EmployerApplicantsPage() {
         resume:documents(*),
         applicant:profiles(
           id, first_name, last_name, email, phone, avatar_url,
-          job_seeker_profile:job_seeker_profiles(city, province, professional_title, bio),
+          job_seeker_profile:job_seeker_profiles(city, province, professional_title, bio, employment_status, hired_application_id),
           skills:job_seeker_skills(id, proficiency, skill:skills(name)),
           educations(*),
           work_experiences(*)
@@ -115,26 +142,18 @@ export default function EmployerApplicantsPage() {
   };
 
   const handleQuickStatusChange = async (appId: string, newStatus: string) => {
-    const targetApp = applications.find((a) => a.id === appId);
+    const targetApp = applications.find((application) => application.id === appId);
+    if (!targetApp || isCandidateHiredElsewhere(targetApp)) return;
 
-    await supabase
-      .from('applications')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', appId);
-
-    // Notify candidate
-    if (targetApp?.applicant_id) {
-      const label = STATUS_OPTIONS.find((s) => s.value === newStatus)?.label || newStatus;
-      await sendNotification({
-        userId: targetApp.applicant_id,
-        type: 'status_update',
-        title: 'Application Status Updated',
-        message: `Your application for ${targetApp.job?.title || 'the position'} is now marked as "${label}".`,
-        link: '/seeker/applications',
-      });
+    const response = await fetch('/api/applications/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId: appId, status: newStatus }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert(result.error || 'Could not update application status.');
+      return;
     }
 
     fetchApplications();
@@ -151,31 +170,27 @@ export default function EmployerApplicantsPage() {
     if (!selectedApp) return;
     setIsUpdating(true);
 
-    await supabase
-      .from('applications')
-      .update({
-        status: targetStatus,
-        recruiter_notes: statusNotes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', selectedApp.id);
-
-    // Notify candidate
-    if (selectedApp.applicant_id) {
-      const label = STATUS_OPTIONS.find((s) => s.value === targetStatus)?.label || targetStatus;
-      await sendNotification({
-        userId: selectedApp.applicant_id,
-        type: 'status_update',
-        title: 'Application Status Updated',
-        message: `Your application for ${selectedApp.job?.title || 'the position'} is now marked as "${label}".`,
-        link: '/seeker/applications',
-      });
+    const response = await fetch('/api/applications/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId: selectedApp.id, status: targetStatus, notes: statusNotes }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert(result.error || 'Could not update application status.');
+      setIsUpdating(false);
+      return;
     }
 
     setIsUpdating(false);
     setSelectedApp(null);
-    fetchApplications();
+    await fetchApplications();
   };
+
+  const isCandidateHiredElsewhere = (application: any) =>
+    application.status === 'hired' ||
+    (application.applicant?.job_seeker_profile?.employment_status === 'hired' &&
+      application.applicant?.job_seeker_profile?.hired_application_id !== application.id);
 
   const filteredApps = applications.filter((app) => {
     if (statusFilter === 'all') return true;
@@ -243,14 +258,27 @@ export default function EmployerApplicantsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredApps.map((app) => {
               const statusInfo = getStatusDisplay(app.status);
-              const phone = app.applicant?.phone || '+63 917 123 4567';
+              const phone = app.applicant?.phone;
+              const hiredElsewhere = isCandidateHiredElsewhere(app);
               const email = app.applicant?.email;
 
               return (
                 <div
                   key={app.id}
-                  className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+                  className={`rounded-2xl border p-5 transition-all flex flex-col justify-between space-y-4 ${
+                    hiredElsewhere
+                      ? 'bg-slate-50 border-slate-200 opacity-75'
+                      : 'bg-white border-slate-200/90 shadow-xs hover:border-slate-300'
+                  }`}
                 >
+                  {/* Not Available Banner */}
+                  {hiredElsewhere && (
+                    <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse" />
+                      <span className="text-[11px] font-bold text-rose-700">Not Available — Hired by another company</span>
+                    </div>
+                  )}
+
                   <div className="space-y-3.5">
                     {/* Header: Avatar, Name, Job Applied */}
                     <div className="flex items-start justify-between gap-3">
@@ -259,10 +287,10 @@ export default function EmployerApplicantsPage() {
                           <img
                             src={app.applicant.avatar_url}
                             alt={app.applicant.first_name || 'Applicant'}
-                            className="w-12 h-12 rounded-full object-cover border border-emerald-200 shadow-xs shrink-0"
+                            className={`w-12 h-12 rounded-full object-cover border shadow-xs shrink-0 ${hiredElsewhere ? 'border-slate-200 grayscale' : 'border-emerald-200'}`}
                           />
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-[#00b074] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                          <div className={`w-12 h-12 rounded-full font-bold text-sm flex items-center justify-center shrink-0 shadow-xs ${hiredElsewhere ? 'bg-slate-400 text-white' : 'bg-[#00b074] text-white'}`}>
                             {app.applicant?.first_name?.[0] || 'U'}
                             {app.applicant?.last_name?.[0] || ''}
                           </div>
@@ -271,7 +299,7 @@ export default function EmployerApplicantsPage() {
                           <h4 className="text-sm font-bold text-slate-900 truncate">
                             {app.applicant?.first_name} {app.applicant?.last_name}
                           </h4>
-                          <p className="text-xs text-emerald-700 font-semibold truncate">
+                          <p className={`text-xs font-semibold truncate ${hiredElsewhere ? 'text-slate-500' : 'text-emerald-700'}`}>
                             {app.job?.title}
                           </p>
                         </div>
@@ -345,13 +373,17 @@ export default function EmployerApplicantsPage() {
 
                   {/* Quick Status Bar & Details Link */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenMoveModal(app)}
-                      className="text-xs font-bold text-slate-700 hover:text-[#00b074] flex items-center gap-1 transition-colors"
-                    >
-                      Update Status <ChevronDown className="w-3 h-3" />
-                    </button>
+                    {hiredElsewhere ? (
+                      <span className="text-[11px] font-semibold text-slate-500">Status locked</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenMoveModal(app)}
+                        className="text-xs font-bold text-slate-700 hover:text-[#00b074] flex items-center gap-1 transition-colors"
+                      >
+                        Update Status <ChevronDown className="w-3 h-3" />
+                      </button>
+                    )}
 
                     <Link href={`/employer/applicants/${app.id}`}>
                       <Button variant="outline" size="sm" className="text-xs font-semibold">
@@ -377,7 +409,7 @@ export default function EmployerApplicantsPage() {
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700">Application Status</label>
             <div className="grid grid-cols-2 gap-2">
-              {STATUS_OPTIONS.map((stg) => (
+              {EMPLOYER_ACTION_STATUSES.map((stg) => (
                 <button
                   type="button"
                   key={stg.value}

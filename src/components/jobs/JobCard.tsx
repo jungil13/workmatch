@@ -7,6 +7,7 @@ import { Job, Company } from '@/types/database';
 import { MatchResult } from '@/types/matching';
 import { Button } from '../ui/Button';
 import { formatSalaryRange, formatDistance } from '@/lib/utils';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { supabase } from '@/lib/supabase/client';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
@@ -14,7 +15,6 @@ import { ApplicantStalkerModal } from '@/components/jobs/ApplicantStalkerModal';
 import {
   trackJobInteraction,
   fetchJobEngagementStats,
-  ApplicantPreview,
 } from '@/lib/services/jobTrackingService';
 import {
   MapPin,
@@ -56,12 +56,11 @@ export function JobCard({
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [stalkerOpen, setStalkerOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [canViewApplicants, setCanViewApplicants] = useState(false);
 
   // Live real engagement metrics
   const [viewsCount, setViewsCount] = useState<number>(job.views || 0);
-  const [applicantsCount, setApplicantsCount] = useState<number>(job.applicant_count || 0);
-  const [estimatedRank, setEstimatedRank] = useState<number>(1);
-  const [recentApplicants, setRecentApplicants] = useState<ApplicantPreview[]>([]);
+  const [applicantsCount, setApplicantsCount] = useState<number | null>(null);
 
   useEffect(() => {
     setIsSaved(isSavedInitial);
@@ -77,39 +76,34 @@ export function JobCard({
       if (!user) return;
       setCurrentUserId(user.id);
 
-      // Check saved status
-      if (!isSavedInitial) {
-        supabase
-          .from('saved_jobs')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('job_id', job.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (isMounted && data) setIsSaved(true);
-          });
-      }
-
-      // Check applied status
-      supabase
-        .from('applications')
-        .select('id')
-        .eq('applicant_id', user.id)
-        .eq('job_id', job.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (isMounted && data) setIsApplied(true);
-        });
+      Promise.all([
+        supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+        supabase.from('employer_profiles').select('company_id').eq('user_id', user.id).maybeSingle(),
+        !isSavedInitial
+          ? supabase.from('saved_jobs').select('id').eq('user_id', user.id).eq('job_id', job.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase.from('applications').select('id').eq('applicant_id', user.id).eq('job_id', job.id).maybeSingle(),
+      ]).then(([profileRes, employerRes, savedRes, appliedRes]) => {
+        if (!isMounted) return;
+        setCanViewApplicants(
+          profileRes.data?.role === 'admin' || employerRes.data?.company_id === job.company_id
+        );
+        if (savedRes.data) setIsSaved(true);
+        if (appliedRes.data) setIsApplied(true);
+      }).catch((error) => {
+        console.error('Could not load job card user status:', error);
+      });
     });
 
-    // 2. Fetch real live statistics (real views/visits, real applicants, real ranking)
-    fetchJobEngagementStats(job.id, job.views || 0, job.match?.overallScore || 90).then((stats) => {
-      if (!isMounted) return;
-      setViewsCount(stats.views);
-      setApplicantsCount(stats.applicantsCount);
-      setEstimatedRank(stats.estimatedRank);
-      setRecentApplicants(stats.recentApplicants);
-    });
+    fetchJobEngagementStats(job.id, job.views || 0)
+      .then((stats) => {
+        if (!isMounted) return;
+        setViewsCount(stats.views);
+        setApplicantsCount(stats.applicantsCount);
+      })
+      .catch((error) => {
+        console.error('Could not load job engagement metrics:', error);
+      });
 
     // 3. Cross-component synchronized view updates
     const handleViewUpdate = (e: Event) => {
@@ -227,9 +221,7 @@ export function JobCard({
                 </Link>
                 <span>•</span>
                 <span>{job.city || 'Remote'}</span>
-                {job.company?.verified && (
-                  <ShieldCheck className="w-3.5 h-3.5 text-mint-500 shrink-0" />
-                )}
+                <VerifiedCompanyBadge company={job.company} />
               </div>
 
               {/* Badge Pill Row */}
@@ -288,13 +280,13 @@ export function JobCard({
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-slate-600">Skills Match</span>
                 <span className="text-dark font-black">
-                  {Math.round(job.match.factors?.skills?.score || 95)}%
+                  {Math.round(job.match.factors?.requiredSkills?.score || 0)}%
                 </span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${Math.min(100, Math.round(job.match.factors?.skills?.score || 95))}%` }}
+                  style={{ width: `${Math.min(100, Math.round(job.match.factors?.requiredSkills?.score || 0))}%` }}
                 />
               </div>
             </div>
@@ -302,13 +294,13 @@ export function JobCard({
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-slate-600">Location Match</span>
                 <span className="text-dark font-black">
-                  {Math.round(job.match.factors?.location?.score || 90)}%
+                  {Math.round(job.match.factors?.location?.score || 0)}%
                 </span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${Math.min(100, Math.round(job.match.factors?.location?.score || 90))}%` }}
+                  style={{ width: `${Math.min(100, Math.round(job.match.factors?.location?.score || 0))}%` }}
                 />
               </div>
             </div>
@@ -316,13 +308,13 @@ export function JobCard({
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-slate-600">Overall Match</span>
                 <span className="text-emerald-700 font-black">
-                  {Math.round(job.match.overallScore || 92)}%
+                  {Math.round(job.match.overallScore ?? 0)}%
                 </span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-mint-500 rounded-full"
-                  style={{ width: `${Math.min(100, Math.round(job.match.overallScore || 92))}%` }}
+                  style={{ width: `${Math.min(100, Math.round(job.match.overallScore ?? 0))}%` }}
                 />
               </div>
             </div>
@@ -384,68 +376,29 @@ export function JobCard({
           </div>
         )}
 
-        {/* Real Candidate Activity & Applicant Stalker Bar — Clickable */}
+        {/* Applicant details are only available to the hiring company and admins. */}
         <div
-          onClick={handleOpenStalker}
-          className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 cursor-pointer hover:bg-slate-50/80 -mx-2 px-2.5 py-2 rounded-2xl transition-all group/stalker"
-          title="Click to view real candidates who visited or applied to this role"
+          onClick={canViewApplicants ? handleOpenStalker : undefined}
+          className={`pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 -mx-2 px-2.5 py-2 rounded-2xl transition-all ${
+            canViewApplicants ? 'cursor-pointer hover:bg-slate-50/80 group/stalker' : ''
+          }`}
+          title={canViewApplicants ? 'View applicants for this role' : undefined}
         >
           <div className="flex items-center gap-3 min-w-0">
-            {/* Overlapping Avatar Circles */}
-            <div className="flex -space-x-2 overflow-hidden items-center shrink-0">
-              {recentApplicants.length > 0 ? (
-                recentApplicants.slice(0, 3).map((app, idx) =>
-                  app.avatarUrl ? (
-                    <img
-                      key={app.id || idx}
-                      src={app.avatarUrl}
-                      alt={app.name}
-                      className="inline-block h-7 w-7 rounded-full ring-2 ring-white object-cover shadow-xs"
-                    />
-                  ) : (
-                    <div
-                      key={app.id || idx}
-                      className={`inline-block h-7 w-7 rounded-full ring-2 ring-white text-white text-[10px] font-bold flex items-center justify-center shadow-xs ${
-                        idx === 0
-                          ? 'bg-blue-600'
-                          : idx === 1
-                          ? 'bg-emerald-600'
-                          : 'bg-purple-600'
-                      }`}
-                    >
-                      {app.initials}
-                    </div>
-                  )
-                )
-              ) : (
-                <div className="inline-block h-7 w-7 rounded-full ring-2 ring-white bg-slate-100 text-slate-500 text-[10px] font-bold flex items-center justify-center shadow-xs">
-                  <Users className="w-3.5 h-3.5 text-slate-400" />
-                </div>
-              )}
-            </div>
-
-            {/* Real Traffic & Applicant Metrics */}
             <div className="text-xs text-slate-700 flex items-center flex-wrap gap-1.5 min-w-0">
               <span className="font-bold text-slate-900">
-                {applicantsCount} {applicantsCount === 1 ? 'applicant' : 'applicants'}
+                {applicantsCount === null
+                  ? 'Applicant count unavailable'
+                  : `${applicantsCount} ${applicantsCount === 1 ? 'applicant' : 'applicants'}`}
               </span>
-
-              <span className="text-slate-300">•</span>
-
-              {applicantsCount === 0 ? (
-                <span className="text-emerald-700 font-black">Be 1st to apply!</span>
-              ) : (
-                <span className="text-slate-700 truncate">
-                  You&apos;d rank{' '}
-                  <strong className="text-emerald-700 font-black">#{estimatedRank}</strong> by match
-                </span>
-              )}
             </div>
           </div>
 
-          <span className="text-xs font-bold text-mint-700 group-hover/stalker:underline flex items-center gap-1 shrink-0 ml-auto sm:ml-0">
-            <Users className="w-3.5 h-3.5" /> See Profiles
-          </span>
+          {canViewApplicants && (
+            <span className="text-xs font-bold text-mint-700 group-hover/stalker:underline flex items-center gap-1 shrink-0 ml-auto sm:ml-0">
+              <Users className="w-3.5 h-3.5" /> See Applicants
+            </span>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -501,7 +454,7 @@ export function JobCard({
         matchScore={job.match?.overallScore || 0}
         onSuccess={() => {
           setIsApplied(true);
-          setApplicantsCount((prev) => prev + 1);
+          setApplicantsCount((prev) => (prev === null ? null : prev + 1));
         }}
       />
 
@@ -510,8 +463,6 @@ export function JobCard({
         isOpen={stalkerOpen}
         onClose={() => setStalkerOpen(false)}
         job={{ ...job, views: viewsCount, applicant_count: applicantsCount }}
-        currentUserId={currentUserId || undefined}
-        currentUserMatchScore={job.match?.overallScore || 92}
       />
     </>
   );

@@ -1,9 +1,26 @@
 export type UserRole = 'job_seeker' | 'employer' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'deactivated';
 export type JobStatus = 'draft' | 'published' | 'closed';
-export type ApplicationStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn';
-export type DocumentType = 'resume' | 'diploma' | 'certificate' | 'other';
-export type VerificationStatus = 'pending' | 'verified' | 'rejected';
+export type ApplicationStatus =
+  | 'applied'
+  | 'screening'
+  | 'shortlisted'
+  | 'interview'
+  | 'offer'
+  | 'hired'
+  | 'rejected'
+  | 'withdrawn'
+  | 'closed';
+export type DocumentType =
+  | 'resume'
+  | 'diploma'
+  | 'certificate'
+  | 'transcript'
+  | 'training_certificate'
+  | 'professional_certification'
+  | 'other';
+export type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'unverified' | 'resubmission_required';
+export type CompanyVerificationStatus = 'unverified' | 'pending' | 'approved' | 'rejected' | 'resubmission_required';
 export type WorkArrangement = 'On-site' | 'Remote' | 'Hybrid';
 export type EmploymentType = 'Full-time' | 'Part-time' | 'Contract' | 'Freelance' | 'Internship';
 export type ExperienceLevel = 'Entry Level' | 'Mid Level' | 'Senior Level' | 'Lead / Manager';
@@ -34,6 +51,9 @@ export interface JobSeekerProfile {
   preferred_work_arrangement?: WorkArrangement | 'Any';
   profile_visibility: 'Public' | 'Employers Only' | 'Private';
   profile_completion: number;
+  employment_status?: 'available' | 'not_available' | 'hired';
+  hired_application_id?: string;
+  notify_other_employers_on_hire?: boolean;
   city?: string;
   province?: string;
   postal_code?: string;
@@ -70,6 +90,14 @@ export interface Company {
   latitude: number;
   longitude: number;
   verified: boolean;
+  verification_status?: CompanyVerificationStatus;
+  verification_notes?: string;
+  verified_at?: string;
+  verified_by?: string;
+  facebook_url?: string;
+  linkedin_url?: string;
+  instagram_url?: string;
+  other_social_url?: string;
   is_urgent?: boolean;
   rating_avg?: number;
   review_count?: number;

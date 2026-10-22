@@ -17,6 +17,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const resolvedParams = use(params);
   const [application, setApplication] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [offerBusy, setOfferBusy] = useState(false);
+  const [offerMsg, setOfferMsg] = useState('');
 
   useEffect(() => {
     supabase
@@ -98,6 +100,53 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           currentStatus={application.status}
           statusHistory={application.history as any}
         />
+
+        {application.status === 'offer' && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 space-y-3">
+            <h4 className="text-sm font-bold text-emerald-900">You have an offer</h4>
+            <p className="text-xs text-emerald-800">
+              Accepting confirms the hire, updates your availability, and notifies other employers with pending applications that you are no longer available. They will not see this company&apos;s offer details.
+            </p>
+            {offerMsg && <p className="text-xs font-semibold">{offerMsg}</p>}
+            <div className="flex gap-2">
+              <Button
+                isLoading={offerBusy}
+                onClick={async () => {
+                  setOfferBusy(true);
+                  const res = await fetch('/api/applications/offer-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ applicationId: application.id, decision: 'accept' }),
+                  });
+                  const data = await res.json();
+                  setOfferBusy(false);
+                  setOfferMsg(data.error || 'Offer accepted. Your employment status is now hired.');
+                  if (res.ok) setApplication((prev: any) => ({ ...prev, status: 'hired' }));
+                }}
+              >
+                Accept offer
+              </Button>
+              <Button
+                variant="outline"
+                disabled={offerBusy}
+                onClick={async () => {
+                  setOfferBusy(true);
+                  const res = await fetch('/api/applications/offer-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ applicationId: application.id, decision: 'decline' }),
+                  });
+                  const data = await res.json();
+                  setOfferBusy(false);
+                  setOfferMsg(data.error || 'Offer declined.');
+                  if (res.ok) setApplication((prev: any) => ({ ...prev, status: 'withdrawn' }));
+                }}
+              >
+                Decline offer
+              </Button>
+            </div>
+          </div>
+        )}
 
 
 

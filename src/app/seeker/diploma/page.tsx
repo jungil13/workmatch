@@ -25,10 +25,12 @@ import {
 export default function SeekerDiplomaPage() {
   const [userId, setUserId] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
+  const [documentType, setDocumentType] = useState('diploma');
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,11 +50,31 @@ export default function SeekerDiplomaPage() {
     setDocuments(data ?? []);
   }
 
-  const getDocumentUrl = (filePath: string) => {
-    if (!filePath) return '';
-    const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
-    return data.publicUrl;
+  const resolveSignedUrl = async (doc: any) => {
+    const res = await fetch(`/api/documents/signed-url?documentId=${doc.id}`);
+    const data = await res.json();
+    if (!data.url) throw new Error(data.error || 'Could not open document.');
+    return data.url as string;
   };
+
+  const openSignedDocument = async (doc: any) => {
+    try {
+      const url = await resolveSignedUrl(doc);
+      window.open(url, '_blank');
+    } catch (err: any) {
+      setErrorMessage(err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setPreviewUrl('');
+      return;
+    }
+    resolveSignedUrl(selectedDoc)
+      .then(setPreviewUrl)
+      .catch((err) => setErrorMessage(err.message));
+  }, [selectedDoc?.id]);
 
   const isImageDocument = (doc: any) => {
     const mime = doc.mime_type || '';
@@ -69,30 +91,7 @@ export default function SeekerDiplomaPage() {
   const handleDownload = async (doc: any) => {
     setDownloadingId(doc.id);
     try {
-      // 1. Try direct Supabase storage download
-      const { data, error } = await supabase.storage.from('documents').download(doc.file_path);
-      let blobUrl = '';
-      if (!error && data) {
-        blobUrl = window.URL.createObjectURL(data);
-      } else {
-        // Fallback: fetch from public URL
-        const publicUrl = getDocumentUrl(doc.file_path);
-        const res = await fetch(publicUrl);
-        const blob = await res.blob();
-        blobUrl = window.URL.createObjectURL(blob);
-      }
-
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = doc.file_name || 'diploma-certificate';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-    } catch (err) {
-      console.error('Download failed, opening file in new tab instead:', err);
-      const publicUrl = getDocumentUrl(doc.file_path);
-      window.open(publicUrl, '_blank');
+      await openSignedDocument(doc);
     } finally {
       setDownloadingId(null);
     }
@@ -101,6 +100,12 @@ export default function SeekerDiplomaPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setErrorMessage('Upload a PDF or image up to 10MB.');
+      e.target.value = '';
+      return;
+    }
     setUploading(true);
     setErrorMessage('');
     setUploadSuccess(false);
@@ -133,7 +138,7 @@ export default function SeekerDiplomaPage() {
       // 2. Create document record in database
       const { error: dbError } = await supabase.from('documents').insert({
         user_id: userId,
-        document_type: 'diploma',
+        document_type: documentType,
         file_name: file.name,
         file_path: filePath,
         mime_type: file.type || 'image/jpeg',
@@ -183,9 +188,9 @@ export default function SeekerDiplomaPage() {
               <ShieldCheck className="w-3.5 h-3.5" /> High Trust Badge
             </span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Boost Your Job Match Compatibility by 30%</h2>
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Upload credentials for admin review</h2>
           <p className="text-xs sm:text-sm text-mint-50 max-w-2xl leading-relaxed">
-            Verified diplomas receive automatic priority ranking in employer candidate searches and faster application review times.
+            Diplomas, transcripts, certificates, and resumes stay private. Only you, authorized employers reviewing your applications, and administrators can access them. Uploading does not automatically verify a credential.
           </p>
         </div>
 
@@ -208,10 +213,22 @@ export default function SeekerDiplomaPage() {
             <UploadCloud className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-dark">Upload Official Diploma or Transcript</h3>
+            <h3 className="text-base font-bold text-dark">Upload a credential</h3>
             <p className="text-xs text-muted max-w-sm mx-auto">
-              Supported formats: JPEG, PNG, WebP, or PDF (Max 10MB per file).
+              Diplomas, transcripts, certificates, and resumes stay private. Only you, reviewing employers on your applications, and admins can open them. Status is set by administrators, not by you.
             </p>
+            <select
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value)}
+              className="mt-3 h-10 rounded-xl border px-3 text-xs"
+            >
+              <option value="diploma">Diploma</option>
+              <option value="transcript">Transcript of Records</option>
+              <option value="certificate">Training / certificate</option>
+              <option value="professional_certification">Professional certification</option>
+              <option value="resume">Resume / CV</option>
+              <option value="other">Other qualification</option>
+            </select>
           </div>
 
           <div className="pt-2">
@@ -259,7 +276,7 @@ export default function SeekerDiplomaPage() {
           ) : (
             <div className="space-y-4">
               {documents.map((doc) => {
-                const docUrl = getDocumentUrl(doc.file_path);
+                const docUrl = '';
                 const isImg = isImageDocument(doc);
                 const isDownloadingThis = downloadingId === doc.id;
 
@@ -426,7 +443,13 @@ export default function SeekerDiplomaPage() {
                 </button>
 
                 <a
-                  href={getDocumentUrl(selectedDoc.file_path)}
+                  href={previewUrl || '#'}
+                  onClick={(e) => {
+                    if (!previewUrl) {
+                      e.preventDefault();
+                      openSignedDocument(selectedDoc);
+                    }
+                  }}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 rounded-xl border border-border bg-white text-xs font-bold text-dark hover:bg-slate-100 flex items-center gap-1.5 shadow-xs transition-colors"
@@ -451,7 +474,7 @@ export default function SeekerDiplomaPage() {
             <div className="p-4 sm:p-6 overflow-auto flex items-center justify-center bg-slate-900/95 flex-1 min-h-[320px] max-h-[70vh]">
               {isImageDocument(selectedDoc) ? (
                 <img
-                  src={getDocumentUrl(selectedDoc.file_path)}
+                  src={previewUrl}
                   alt={selectedDoc.file_name}
                   className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
                   onError={(e) => {
@@ -460,7 +483,7 @@ export default function SeekerDiplomaPage() {
                       parent.innerHTML = `
                         <div class="text-center p-8 space-y-3 text-white">
                           <p class="text-sm font-semibold text-rose-300">Could not render image preview.</p>
-                          <a href="${getDocumentUrl(selectedDoc.file_path)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-mint-500 text-white font-bold text-xs hover:bg-mint-600">
+                          <a href="${previewUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-mint-500 text-white font-bold text-xs hover:bg-mint-600">
                             Open in New Tab
                           </a>
                         </div>
@@ -471,7 +494,7 @@ export default function SeekerDiplomaPage() {
               ) : (
                 <div className="w-full h-full min-h-[500px] flex flex-col rounded-xl overflow-hidden bg-white">
                   <iframe
-                    src={getDocumentUrl(selectedDoc.file_path)}
+                    src={previewUrl}
                     className="w-full h-full flex-1 border-0 rounded-xl"
                     title={selectedDoc.file_name}
                   />

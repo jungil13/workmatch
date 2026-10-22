@@ -30,11 +30,41 @@ export default function AdminDashboardPage() {
     avgMatch: 0,
   });
   const [pendingDocs, setPendingDocs] = useState<any[]>([]);
+  const [secureDocUrls, setSecureDocUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (!pendingDocs.length) {
+      setSecureDocUrls({});
+      return;
+    }
+
+    let cancelled = false;
+    async function loadPreviewUrls() {
+      const nextUrls: Record<string, string> = {};
+      for (const doc of pendingDocs) {
+        try {
+          const res = await fetch(`/api/documents/signed-url?documentId=${doc.id}`);
+          const data = await res.json();
+          if (!cancelled && data.url) {
+            nextUrls[doc.id] = data.url;
+          }
+        } catch {
+          // ignore preview failures; fallback to file icon
+        }
+      }
+      if (!cancelled) setSecureDocUrls(nextUrls);
+    }
+
+    loadPreviewUrls();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingDocs]);
 
   async function fetchDashboardData() {
     const [
@@ -45,7 +75,6 @@ export default function AdminDashboardPage() {
       { count: companies },
       { count: verifiedDocs },
       { count: pendingDocsCount },
-      docsRes,
     ] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'job_seeker'),
@@ -54,8 +83,21 @@ export default function AdminDashboardPage() {
       supabase.from('companies').select('*', { count: 'exact', head: true }),
       supabase.from('documents').select('*', { count: 'exact', head: true }).eq('verification_status', 'verified'),
       supabase.from('documents').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-      supabase.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(6),
     ]);
+
+    try {
+      const response = await fetch('/api/admin/documents');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load pending documents.');
+      setPendingDocs(
+        (result.documents || [])
+          .filter((document: any) => document.verification_status === 'pending')
+          .slice(0, 6)
+      );
+    } catch (error) {
+      console.error('Could not load admin document previews:', error);
+      setPendingDocs([]);
+    }
 
     setStats({
       totalUsers: totalUsers ?? 0,
@@ -67,7 +109,6 @@ export default function AdminDashboardPage() {
       pendingDocuments: pendingDocsCount ?? 0,
       avgMatch: 0,
     });
-    setPendingDocs(docsRes.data ?? []);
     setLoading(false);
   }
 
@@ -166,8 +207,8 @@ export default function AdminDashboardPage() {
                 ) : (
                   <div className="space-y-3">
                     {pendingDocs.map((doc) => {
-                      const { data } = supabase.storage.from('documents').getPublicUrl(doc.file_path || '');
                       const isImg = doc.mime_type?.startsWith('image/') || doc.file_name?.match(/\.(jpg|jpeg|png|webp)$/i);
+                      const secureUrl = secureDocUrls[doc.id];
 
                       return (
                         <div
@@ -176,9 +217,9 @@ export default function AdminDashboardPage() {
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-12 h-12 rounded-xl bg-white border border-border flex items-center justify-center overflow-hidden shrink-0">
-                              {isImg ? (
+                              {isImg && secureUrl ? (
                                 <img
-                                  src={data.publicUrl}
+                                  src={secureUrl}
                                   alt={doc.file_name}
                                   className="w-full h-full object-cover"
                                 />
@@ -200,7 +241,7 @@ export default function AdminDashboardPage() {
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Verified
                               </span>
                             ) : (
-                              <Link href="/admin/documents">
+                              <Link href={`/admin/documents?documentId=${encodeURIComponent(doc.id)}`}>
                                 <Button variant="primary" size="sm" className="h-8 text-xs font-bold">
                                   Review
                                 </Button>

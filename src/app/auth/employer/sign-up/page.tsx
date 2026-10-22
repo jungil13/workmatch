@@ -31,6 +31,7 @@ export default function EmployerSignUpPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
 
+
   // Check if landing here from an email confirmation redirect
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -199,12 +200,15 @@ export default function EmployerSignUpPage() {
 
         // 3. Create employer profile
         if (company) {
-          await supabase.from('employer_profiles').upsert({
-            user_id: authData.user.id,
-            company_id: company.id,
-            position: 'Talent Acquisition / HR Manager',
-            updated_at: new Date().toISOString(),
-          });
+          await supabase.from('employer_profiles').upsert(
+            {
+              user_id: authData.user.id,
+              company_id: company.id,
+              position: 'Talent Acquisition / HR Manager',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' }
+          );
         }
 
         // 4. Default user settings
@@ -268,6 +272,7 @@ export default function EmployerSignUpPage() {
                 <li>Open the email from <strong>WorkMatch</strong> in your inbox.</li>
                 <li>Click the <strong>"Confirm your email"</strong> button.</li>
                 <li>You will be redirected to sign in and access your dashboard.</li>
+                <li>Once logged in, go to <strong>Company Profile</strong> to upload your business permit for verification.</li>
               </ol>
               <p className="text-[11px] text-emerald-700 pt-1">
                 Don't see it? Check your <strong>Spam</strong> or <strong>Junk</strong> folder.
@@ -384,6 +389,14 @@ export default function EmployerSignUpPage() {
               onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
               required
             />
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900">
+              <p className="font-bold text-sm text-amber-950 mb-1">📋 Business Permit Required to Post Jobs</p>
+              <p>
+                After creating your account, go to <strong>Company Profile</strong> to upload your business permit.
+                An administrator will review it before you can publish job postings.
+              </p>
+            </div>
 
             <Input
               label="Work Email Address *"

@@ -16,20 +16,19 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { formatSalaryRange } from '@/lib/utils';
+import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS } from '@/lib/applicationStatus';
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  applied: { label: 'Pending', color: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  screening: { label: 'Under Review', color: 'bg-blue-50 text-blue-700 border border-blue-200' },
-  hired: { label: 'Contacted', color: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  rejected: { label: 'Rejected', color: 'bg-rose-50 text-rose-700 border border-rose-200' },
-};
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = Object.fromEntries(
+  Object.keys(APPLICATION_STATUS_LABELS).map((key) => [
+    key,
+    { label: APPLICATION_STATUS_LABELS[key], color: `${APPLICATION_STATUS_COLORS[key]} border` },
+  ])
+);
 
-const STAGES = [
-  { key: 'applied', label: 'Pending' },
-  { key: 'screening', label: 'Under Review' },
-  { key: 'hired', label: 'Contacted' },
-  { key: 'rejected', label: 'Rejected' },
-];
+const STAGES = Object.keys(APPLICATION_STATUS_LABELS).map((key) => ({
+  key,
+  label: APPLICATION_STATUS_LABELS[key],
+}));
 
 export default function SeekerApplicationsPage() {
   const [applications, setApplications] = useState<any[]>([]);

@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Progress } from '@/components/ui/Progress';
 import { MatchScoreGauge } from '@/components/matching/MatchScoreGauge';
-import { ApplicantStalkerModal } from '@/components/jobs/ApplicantStalkerModal';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { calculateJobMatch } from '@/lib/matching/matchingEngine';
 import { supabase } from '@/lib/supabase/client';
+import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { formatSalaryRange, formatDistance, formatRelativeTime } from '@/lib/utils';
 import {
   Sparkles,
@@ -50,7 +51,6 @@ export default function SeekerAIRecommendationsPage() {
   // Modals
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any | null>(null);
   const [selectedJobForApply, setSelectedJobForApply] = useState<any | null>(null);
-  const [selectedJobForStalker, setSelectedJobForStalker] = useState<any | null>(null);
 
   const getCompanyInitials = (name?: string) => {
     if (!name) return 'WM';
@@ -73,45 +73,67 @@ export default function SeekerAIRecommendationsPage() {
   async function loadRecommendations(uid: string) {
     setLoading(true);
 
-    const [profileRes, seekerRes, skillsRes, eduRes, savedRes, appliedRes, jobsRes] =
+    const [profileRes, seekerRes, skillsRes, eduRes, expRes, certRes, savedRes, appliedRes] =
       await Promise.all([
         supabase.from('profiles').select('*').eq('id', uid).maybeSingle(),
         supabase.from('job_seeker_profiles').select('*').eq('user_id', uid).maybeSingle(),
         supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('user_id', uid),
         supabase.from('educations').select('*').eq('user_id', uid),
+        supabase.from('work_experiences').select('*').eq('user_id', uid),
+        supabase.from('certifications').select('*').eq('user_id', uid),
         supabase.from('saved_jobs').select('job_id').eq('user_id', uid),
         supabase.from('applications').select('job_id').eq('applicant_id', uid),
-        supabase
-          .from('jobs')
-          .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
-          .eq('status', 'published')
-          .order('created_at', { ascending: false }),
       ]);
 
     const cData = {
       profile: seekerRes.data || {},
       skills: skillsRes.data || [],
       educations: eduRes.data || [],
+      workExperiences: expRes.data || [],
+      certifications: certRes.data || [],
       user: profileRes.data || {},
     };
     setCandidateData(cData);
     setSavedJobIds((savedRes.data ?? []).map((s: any) => s.job_id));
     setAppliedJobIds((appliedRes.data ?? []).map((a: any) => a.job_id));
 
-    const rawJobs = jobsRes.data ?? [];
+    try {
+      const res = await fetch('/api/matching/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.results)) {
+        const applicantCounts = await fetchJobApplicantCounts(data.results.map((row: any) => row.job.id));
+        setRecommendedJobs(
+          data.results.map((row: any) => ({
+            ...row.job,
+            match: row.match,
+            applicantCount: applicantCounts[row.job.id] ?? 0,
+          }))
+        );
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Fall back to local deterministic scoring if Gemini/cache is unavailable.
+    }
 
-    // Evaluate multi-factor match score for every job against candidate's profile
-    const scoredJobs = rawJobs.map((job: any) => {
-      const match = calculateJobMatch(job, cData as any);
-      return {
-        ...job,
-        match,
-      };
-    });
+    const { data: rawJobs } = await supabase
+      .from('jobs')
+      .select('*, company:companies(*), required_skills:job_skills(*, skill:skills(*))')
+      .eq('status', 'published')
+      .order('created_at', { ascending: false });
+    let applicantCounts: Record<string, number> = {};
+    try {
+      applicantCounts = await fetchJobApplicantCounts((rawJobs ?? []).map((job: any) => job.id));
+    } catch (error) {
+      console.error('Could not load job applicant counts:', error);
+    }
 
-    // Sort by highest match score first
+    const scoredJobs = (rawJobs ?? []).map((job: any) => ({
+      ...job,
+      match: calculateJobMatch(job, cData as any),
+      applicantCount: applicantCounts[job.id] ?? null,
+    }));
     scoredJobs.sort((a, b) => b.match.overallScore - a.match.overallScore);
-
     setRecommendedJobs(scoredJobs);
     setLoading(false);
   }
@@ -320,9 +342,8 @@ export default function SeekerAIRecommendationsPage() {
               const skillsList = (job.required_skills || (job as any).job_skills || [])
                 .slice(0, 4)
                 .map((sk: any) => sk.skill?.name || sk.name || 'Skill');
-              const matchScore = job.match?.overallScore || Math.min(96, 75 + ((job.id?.charCodeAt(0) || 0) % 20));
+              const matchScore = job.match?.overallScore ?? null;
               const distanceKm = job.match?.distanceKm ?? job.distance_km;
-              const appliedCount = job.views ? Math.max(Math.floor(job.views / 3), 4) : 24;
               const isUrgent = job.is_urgent || job.company?.is_urgent;
 
               return (
@@ -355,9 +376,10 @@ export default function SeekerAIRecommendationsPage() {
                         >
                           {job.title}
                         </Link>
-                        <p className="text-xs text-slate-500 truncate mt-0.5">
-                          {job.company?.name || 'Company'}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <p className="text-xs text-slate-500 truncate">{job.company?.name || 'Company'}</p>
+                          <VerifiedCompanyBadge company={job.company} />
+                        </div>
                       </div>
                     </div>
 
@@ -382,10 +404,16 @@ export default function SeekerAIRecommendationsPage() {
 
                   {/* Match Score & Distance Pill Badges */}
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      {matchScore}% Match
-                    </span>
+                    {matchScore === null ? (
+                      <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                        Add profile details for a match score
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                        {matchScore}% Match
+                      </span>
+                    )}
                     <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/80">
                       {formatDistance(distanceKm)}
                     </span>
@@ -429,34 +457,13 @@ export default function SeekerAIRecommendationsPage() {
                     </div>
                   )}
 
-                  {/* Card Footer: Overlapping Avatars + Apply Now Button */}
+                  {/* Card Footer: Applicant count + Apply Now Button */}
                   <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                    {/* Top row: Avatar stack + applicants count + See Profiles */}
-                    <div
-                      className="flex items-center justify-between gap-2 cursor-pointer hover:bg-emerald-50/60 -mx-1 px-1 py-1 rounded-xl transition-all group/stalker"
-                      onClick={() => setSelectedJobForStalker(job)}
-                      title="View candidates who applied or visited this job"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="flex -space-x-2 overflow-hidden shrink-0">
-                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-                            A
-                          </div>
-                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
-                            B
-                          </div>
-                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center">
-                            C
-                          </div>
-                        </div>
-                        <span className="text-[11px] text-slate-600 font-semibold truncate">
-                          <strong className="text-slate-800">{appliedCount}</strong> people applied
-                        </span>
-                      </div>
-
-                      <span className="text-[11px] font-bold text-emerald-700 group-hover/stalker:underline flex items-center gap-1 shrink-0">
-                        <Users className="w-3 h-3" /> See Profiles
-                      </span>
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                      <Users className="w-3 h-3 text-emerald-700" />
+                      {job.applicantCount === null
+                        ? 'Applicant count unavailable'
+                        : `${job.applicantCount ?? 0} ${(job.applicantCount ?? 0) === 1 ? 'applicant' : 'applicants'}`}
                     </div>
 
                     {/* Apply Now Pill Button */}
@@ -502,16 +509,6 @@ export default function SeekerAIRecommendationsPage() {
         />
       )}
 
-      {/* Applicant Stalker Modal */}
-      {selectedJobForStalker && (
-        <ApplicantStalkerModal
-          isOpen={!!selectedJobForStalker}
-          onClose={() => setSelectedJobForStalker(null)}
-          job={selectedJobForStalker}
-          currentUserId={userId}
-          currentUserMatchScore={selectedJobForStalker.match?.overallScore || 92}
-        />
-      )}
     </DashboardLayout>
   );
 }

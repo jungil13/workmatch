@@ -9,6 +9,8 @@ import { formatSalaryRange, formatRelativeTime } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import { Job, Company } from '@/types/database';
 import { MatchResult } from '@/types/matching';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
+import { CompanyPublicLinks } from '@/components/company/CompanyPublicLinks';
 import {
   Building2,
   MapPin,
@@ -76,10 +78,10 @@ export function JobDetailsModal({
                 className="text-xs font-bold text-mint-700 hover:underline flex items-center gap-1"
               >
                 {job.company?.name || 'Company'}
-                {job.company?.verified && (
-                  <ShieldCheck className="w-3.5 h-3.5 text-mint-600" />
-                )}
               </Link>
+              <div className="mt-1">
+                <VerifiedCompanyBadge company={job.company} />
+              </div>
               <h2 className="text-xl sm:text-2xl font-black text-dark tracking-tight mt-0.5">
                 {job.title}
               </h2>
@@ -127,6 +129,8 @@ export function JobDetailsModal({
             </span>
           </div>
         )}
+
+        <CompanyPublicLinks company={job.company} />
 
         {/* Highlight Stats Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -240,7 +244,10 @@ export function JobDetailsModal({
         {job.company && (
           <div className="p-4 rounded-2xl border border-border bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h5 className="text-xs font-bold text-dark">{job.company.name}</h5>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h5 className="text-xs font-bold text-dark">{job.company.name}</h5>
+                <VerifiedCompanyBadge company={job.company} />
+              </div>
               <p className="text-[11px] text-muted">{job.company.industry} • {job.company.city}, {job.company.province}</p>
             </div>
             <Link

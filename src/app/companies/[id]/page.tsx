@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
+import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { JobCard } from '@/components/jobs/JobCard';
 import { supabase } from '@/lib/supabase/client';
 import {
   Building2,
   MapPin,
-  ShieldCheck,
   Star,
   ArrowLeft,
   CheckCircle2,
@@ -99,11 +99,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       <Flame className="w-3.5 h-3.5 text-rose-600" /> Urgent Hiring
                     </span>
                   )}
-                  {company.verified && (
-                    <span className="bg-mint-50 text-mint-700 border border-mint-200 p-1 rounded-full" title="Verified SEC">
-                      <ShieldCheck className="w-4 h-4 text-mint-600" />
-                    </span>
-                  )}
+                  <VerifiedCompanyBadge company={company} />
                 </div>
                 <p className="text-sm text-mint-700 font-semibold">{company.industry}</p>
                 <p className="text-xs text-muted flex items-center gap-1 mt-1">
