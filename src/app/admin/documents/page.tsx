@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { SignedDocumentImage, SignedDocumentLink } from '@/components/documents/SignedDocumentLink';
 import { VerificationStatus } from '@/types/database';
+import { useToast, useConfirm } from '@/components/ui/Toast';
 import {
   GraduationCap,
   CheckCircle2,
@@ -21,6 +22,8 @@ import {
 } from 'lucide-react';
 
 export default function AdminDocumentsQueuePage() {
+  const toast = useToast();
+  const { confirm: confirmDialog, ConfirmDialog } = useConfirm();
   const [documents, setDocuments] = useState<any[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -33,10 +36,18 @@ export default function AdminDocumentsQueuePage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    void fetchDocuments();
+    void fetchDocuments(true);
   }, []);
 
-  async function fetchDocuments() {
+  const clearUrlParam = () => {
+    if (typeof window !== 'undefined' && window.location.search.includes('documentId')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('documentId');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    }
+  };
+
+  async function fetchDocuments(openFromUrl = false) {
     setLoading(true);
     setErrorMessage('');
     try {
@@ -46,13 +57,18 @@ export default function AdminDocumentsQueuePage() {
 
       const loadedDocuments = result.documents ?? [];
       setDocuments(loadedDocuments);
-      const documentId = new URLSearchParams(window.location.search).get('documentId');
-      if (documentId) {
-        const targetDocument = loadedDocuments.find((document: any) => document.id === documentId);
-        if (targetDocument?.verification_status === 'pending') {
-          handleOpenReview(targetDocument, 'verified');
-        } else if (!targetDocument) {
-          setErrorMessage('The selected document was not found in the verification queue.');
+      if (openFromUrl) {
+        const documentId = new URLSearchParams(window.location.search).get('documentId');
+        if (documentId) {
+          const targetDocument = loadedDocuments.find((document: any) => document.id === documentId);
+          if (targetDocument) {
+            // Open review modal with appropriate action for initial URL param
+            const defaultAction: VerificationStatus =
+              targetDocument.verification_status === 'rejected' ? 'rejected' : 'verified';
+            handleOpenReview(targetDocument, defaultAction);
+          } else {
+            setErrorMessage('The selected document was not found in the verification queue.');
+          }
         }
       }
     } catch (error) {
@@ -79,6 +95,11 @@ export default function AdminDocumentsQueuePage() {
     );
   };
 
+  const handleCloseReview = () => {
+    setSelectedDoc(null);
+    clearUrlParam();
+  };
+
   const handleConfirmDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoc) return;
@@ -99,16 +120,29 @@ export default function AdminDocumentsQueuePage() {
       if (!response.ok) throw new Error(result.error || 'Could not update document status.');
 
       setSelectedDoc(null);
-      await fetchDocuments();
+      clearUrlParam();
+      await fetchDocuments(false);
+      toast.success(
+        statusAction === 'verified' ? 'Degree approved!' : 'Document rejected',
+        statusAction === 'verified'
+          ? 'The candidate has been notified of their verification.'
+          : 'The document was marked as rejected.'
+      );
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not update document status.');
+      const msg = error instanceof Error ? error.message : 'Could not update document status.';
+      setErrorMessage(msg);
+      toast.error('Action failed', msg);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteDocument = async (doc: any) => {
-    if (!window.confirm(`Permanently delete ${doc.file_name} and its uploaded file?`)) return;
+    const ok = await confirmDialog(
+      `Permanently delete "${doc.file_name}" and its uploaded file? This cannot be undone.`,
+      { confirmLabel: 'Delete', cancelLabel: 'Cancel', type: 'error' }
+    );
+    if (!ok) return;
 
     setDeletingId(doc.id);
     setErrorMessage('');
@@ -121,19 +155,26 @@ export default function AdminDocumentsQueuePage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not delete the document.');
 
-      if (selectedDoc?.id === doc.id) setSelectedDoc(null);
-      await fetchDocuments();
+      if (selectedDoc?.id === doc.id) {
+        setSelectedDoc(null);
+        clearUrlParam();
+      }
+      await fetchDocuments(false);
+      toast.success('Document deleted', 'The document record and file were removed.');
       if (result.warnings?.length) {
-        setErrorMessage(result.warnings.join(' '));
+        toast.warning('Deletion warning', result.warnings.join(' '));
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not delete the document.');
+      const msg = error instanceof Error ? error.message : 'Could not delete the document.';
+      setErrorMessage(msg);
+      toast.error('Delete failed', msg);
     } finally {
       setDeletingId('');
     }
   };
 
   return (
+    <>
     <DashboardLayout
       portal="admin"
       title="Document Verification Queue"
@@ -266,12 +307,34 @@ export default function AdminDocumentsQueuePage() {
                       <Trash2 className="w-3.5 h-3.5" /> Delete
                     </Button>
                     {doc.verification_status === 'verified' ? (
-                      <div className="w-full py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs">
-                        <CheckCircle2 className="w-4 h-4 text-[#00b074]" /> Approved &amp; Verified
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00b074] font-bold text-xs flex items-center justify-center gap-1 shadow-2xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#00b074]" /> Approved
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'rejected')}
+                          className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200 shrink-0"
+                          title="Reject or re-evaluate document"
+                        >
+                          Change
+                        </Button>
                       </div>
                     ) : doc.verification_status === 'rejected' ? (
-                      <div className="w-full py-2 px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs">
-                        <X className="w-4 h-4 text-rose-600" /> Rejected
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1 shadow-2xs">
+                          <X className="w-3.5 h-3.5 text-rose-600" /> Rejected
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenReview(doc, 'verified')}
+                          className="text-xs text-emerald-600 hover:bg-emerald-50 border-emerald-200 shrink-0"
+                          title="Approve or re-evaluate document"
+                        >
+                          Approve
+                        </Button>
                       </div>
                     ) : (
                       <>
@@ -304,8 +367,8 @@ export default function AdminDocumentsQueuePage() {
       {/* Review & Audit Modal */}
       <Modal
         isOpen={Boolean(selectedDoc)}
-        onClose={() => setSelectedDoc(null)}
-        title={`Confirm Degree ${statusAction === 'verified' ? 'Approval' : 'Rejection'}`}
+        onClose={handleCloseReview}
+        title={`Degree Verification: ${statusAction === 'verified' ? 'Approve' : 'Reject'}`}
         description={selectedDoc?.file_name}
       >
         <form onSubmit={handleConfirmDecision} className="space-y-4">
@@ -330,6 +393,44 @@ export default function AdminDocumentsQueuePage() {
           )}
 
           <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-700">Verification Decision</label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusAction('verified');
+                  if (!reviewNotes || reviewNotes.includes('Incomplete document scan')) {
+                    setReviewNotes('Verified against registrar records and institutional database.');
+                  }
+                }}
+                className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  statusAction === 'verified'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-dark hover:bg-slate-200/60'
+                }`}
+              >
+                <Check className="w-3.5 h-3.5" /> Approve Degree
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusAction('rejected');
+                  if (!reviewNotes || reviewNotes.includes('Verified against registrar records')) {
+                    setReviewNotes('Incomplete document scan; please re-upload clear full-page transcript.');
+                  }
+                }}
+                className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  statusAction === 'rejected'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-dark hover:bg-slate-200/60'
+                }`}
+              >
+                <X className="w-3.5 h-3.5" /> Reject Document
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700">Audit Verification Note *</label>
             <textarea
               rows={3}
@@ -341,7 +442,7 @@ export default function AdminDocumentsQueuePage() {
           </div>
 
           <div className="pt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDoc(null)}>
+            <Button type="button" variant="outline" size="sm" onClick={handleCloseReview}>
               Cancel
             </Button>
             <Button
@@ -349,8 +450,13 @@ export default function AdminDocumentsQueuePage() {
               variant={statusAction === 'verified' ? 'primary' : 'danger'}
               size="md"
               disabled={saving}
+              isLoading={saving}
             >
-              {saving ? 'Saving...' : `Confirm ${statusAction === 'verified' ? 'Verification' : 'Rejection'}`}
+              {saving
+                ? 'Saving...'
+                : statusAction === 'verified'
+                ? 'Confirm Degree Approval'
+                : 'Confirm Degree Rejection'}
             </Button>
           </div>
         </form>
@@ -401,5 +507,7 @@ export default function AdminDocumentsQueuePage() {
         </div>
       )}
     </DashboardLayout>
+    {ConfirmDialog}
+    </>
   );
 }

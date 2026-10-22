@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from 'next/font/google';
 import "./globals.css";
 import { WorkMatchAssistant } from '@/components/ai/WorkMatchAssistant';
+import { ToastProvider } from '@/components/ui/Toast';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -26,10 +27,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full bg-background antialiased">
       <body className={`min-h-full flex flex-col selection:bg-mint-200 selection:text-dark ${poppins.className}`}>
-        <div className="flex-1 flex flex-col">
-          {children}
-        </div>
-        <WorkMatchAssistant />
+        <ToastProvider>
+          <div className="flex-1 flex flex-col">
+            {children}
+          </div>
+          <WorkMatchAssistant />
+        </ToastProvider>
       </body>
     </html>
   );

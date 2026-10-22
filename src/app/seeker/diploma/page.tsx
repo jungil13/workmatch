@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
+import { useToast, useConfirm } from '@/components/ui/Toast';
 import {
   UploadCloud,
   GraduationCap,
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react';
 
 export default function SeekerDiplomaPage() {
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [userId, setUserId] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
   const [documentType, setDocumentType] = useState('diploma');
@@ -136,7 +139,7 @@ export default function SeekerDiplomaPage() {
       }
 
       // 2. Create document record in database
-      const { error: dbError } = await supabase.from('documents').insert({
+      const { data: insertedDoc, error: dbError } = await supabase.from('documents').insert({
         user_id: userId,
         document_type: documentType,
         file_name: file.name,
@@ -145,7 +148,7 @@ export default function SeekerDiplomaPage() {
         file_size: file.size,
         verification_status: 'pending',
         uploaded_at: new Date().toISOString(),
-      });
+      }).select('id').single();
 
       if (dbError) {
         console.error('Database document insert error:', dbError);
@@ -154,6 +157,24 @@ export default function SeekerDiplomaPage() {
         await fetchDocuments(userId);
         setUploadSuccess(true);
         setTimeout(() => setUploadSuccess(false), 4000);
+        toast.success('Credential uploaded!', 'Your document is now pending administrative verification.');
+
+        // Notify all admins via dedicated server-side endpoint (uses service role key)
+        try {
+          const docId = (insertedDoc as any)?.id ?? '';
+          await fetch('/api/documents/notify-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              documentId: docId,
+              fileName: file.name,
+              documentType,
+            }),
+          });
+        } catch (notifError) {
+          // Non-critical: notification failure should not block the upload flow
+          console.warn('Failed to notify admins:', notifError);
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'An unexpected error occurred during upload.');
@@ -164,16 +185,23 @@ export default function SeekerDiplomaPage() {
   };
 
   const handleDelete = async (id: string, filePath: string) => {
-    if (!confirm('Are you sure you want to remove this uploaded credential?')) return;
+    const ok = await confirm('Are you sure you want to remove this uploaded credential? This cannot be undone.', {
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      type: 'error',
+    });
+    if (!ok) return;
     await supabase.storage.from('documents').remove([filePath]);
     await supabase.from('documents').delete().eq('id', id);
     setDocuments(prev => prev.filter(d => d.id !== id));
     if (selectedDoc?.id === id) {
       setSelectedDoc(null);
     }
+    toast.success('Document removed', 'The credential was successfully deleted.');
   };
 
   return (
+    <>
     <DashboardLayout
       portal="seeker"
       title="Diploma & Credential Verification"
@@ -276,7 +304,6 @@ export default function SeekerDiplomaPage() {
           ) : (
             <div className="space-y-4">
               {documents.map((doc) => {
-                const docUrl = '';
                 const isImg = isImageDocument(doc);
                 const isDownloadingThis = downloadingId === doc.id;
 
@@ -295,19 +322,9 @@ export default function SeekerDiplomaPage() {
                         title="Click to view full certificate"
                       >
                         {isImg ? (
-                          <>
-                            <img
-                              src={docUrl}
-                              alt={doc.file_name}
-                              className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-300"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-dark/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center text-white">
-                              <ZoomIn className="w-5 h-5" />
-                            </div>
-                          </>
+                          <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-500 group-hover/thumb:bg-mint-50 group-hover/thumb:text-mint-700 transition-colors">
+                            <ZoomIn className="w-5 h-5" />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-600 group-hover/thumb:bg-mint-50 group-hover/thumb:text-mint-700 transition-colors">
                             <FileText className="w-6 h-6" />
@@ -473,31 +490,28 @@ export default function SeekerDiplomaPage() {
             {/* Modal Body / Document Preview Area */}
             <div className="p-4 sm:p-6 overflow-auto flex items-center justify-center bg-slate-900/95 flex-1 min-h-[320px] max-h-[70vh]">
               {isImageDocument(selectedDoc) ? (
-                <img
-                  src={previewUrl}
-                  alt={selectedDoc.file_name}
-                  className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
-                  onError={(e) => {
-                    const parent = (e.target as HTMLElement).parentElement;
-                    if (parent) {
-                      parent.innerHTML = `
-                        <div class="text-center p-8 space-y-3 text-white">
-                          <p class="text-sm font-semibold text-rose-300">Could not render image preview.</p>
-                          <a href="${previewUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-mint-500 text-white font-bold text-xs hover:bg-mint-600">
-                            Open in New Tab
-                          </a>
-                        </div>
-                      `;
-                    }
-                  }}
-                />
+                previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt={selectedDoc.file_name}
+                    className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
+                  />
+                ) : (
+                  <Loader2 className="w-8 h-8 animate-spin text-white" aria-label="Loading document preview" />
+                )
               ) : (
                 <div className="w-full h-full min-h-[500px] flex flex-col rounded-xl overflow-hidden bg-white">
-                  <iframe
-                    src={previewUrl}
-                    className="w-full h-full flex-1 border-0 rounded-xl"
-                    title={selectedDoc.file_name}
-                  />
+                  {previewUrl ? (
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-full flex-1 border-0 rounded-xl"
+                      title={selectedDoc.file_name}
+                    />
+                  ) : (
+                    <div className="flex flex-1 items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-mint-600" aria-label="Loading document preview" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -550,5 +564,7 @@ export default function SeekerDiplomaPage() {
         </div>
       )}
     </DashboardLayout>
+    {ConfirmDialog}
+    </>
   );
 }

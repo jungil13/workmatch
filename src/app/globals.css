@@ -81,3 +81,9 @@ body {
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
 }
+
+/* Toast progress bar shrink */
+@keyframes toast-shrink {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}

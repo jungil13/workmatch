@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
 import { supabase } from '@/lib/supabase/client';
+import { useToast, useConfirm } from '@/components/ui/Toast';
 import {
   Building2,
   ShieldCheck,
@@ -46,6 +47,8 @@ const CITY_PROVINCE_MAP: Record<string, string> = {
 };
 
 export default function EmployerProfilePage() {
+  const toast = useToast();
+  const { confirm: confirmDialog, ConfirmDialog } = useConfirm();
   const [userId, setUserId] = useState('');
   const [companyId, setCompanyId] = useState<string | null>(null);
 
@@ -220,7 +223,13 @@ export default function EmployerProfilePage() {
   }, [companyId]);
 
   const deletePermitSubmission = async () => {
-    if (!permitSubmission || !window.confirm('Delete this business permit submission?')) return;
+    if (!permitSubmission) return;
+    const ok = await confirmDialog('Permanently delete this business permit submission?', {
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      type: 'error',
+    });
+    if (!ok) return;
 
     setVerifyBusy(true);
     setVerifyMsg('');
@@ -237,9 +246,12 @@ export default function EmployerProfilePage() {
       setPermitFile(null);
       setVerificationStatus('unverified');
       setVerifyMsg('Business permit deleted.');
+      toast.success('Permit deleted', 'Your business permit submission was removed.');
       await loadPermitSubmission(true);
     } catch (error) {
-      setVerifyMsg(error instanceof Error ? error.message : 'Could not delete the business permit.');
+      const msg = error instanceof Error ? error.message : 'Could not delete the business permit.';
+      setVerifyMsg(msg);
+      toast.error('Delete failed', msg);
     } finally {
       setVerifyBusy(false);
     }
@@ -424,6 +436,7 @@ export default function EmployerProfilePage() {
   };
 
   return (
+    <>
     <DashboardLayout
       portal="employer"
       title="Company Profile & Branding"
@@ -906,5 +919,7 @@ export default function EmployerProfilePage() {
         )}
       </div>
     </DashboardLayout>
+    {ConfirmDialog}
+    </>
   );
 }

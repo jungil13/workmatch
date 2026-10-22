@@ -438,7 +438,7 @@ export function JobCard({
 
       {/* View Details Modal */}
       <JobDetailsModal
-        job={{ ...job, views: viewsCount, applicant_count: applicantsCount }}
+        job={{ ...job, views: viewsCount, applicant_count: applicantsCount ?? undefined }}
         isOpen={isDetailsOpen}
         onClose={() => setIsDetailsOpen(false)}
         onApplyClick={handleOpenApply}

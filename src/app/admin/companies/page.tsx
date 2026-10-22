@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { supabase } from '@/lib/supabase/client';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
+import { useToast, useConfirm } from '@/components/ui/Toast';
 import { Building2, MapPin, Trash2, FileText } from 'lucide-react';
 
 export default function AdminCompaniesPage() {
+  const toast = useToast();
+  const { confirm: confirmDialog, ConfirmDialog } = useConfirm();
   const [companies, setCompanies] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,16 +74,22 @@ export default function AdminCompaniesPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage(data.error || 'Action failed.');
+        const errorMsg = data.error || 'Action failed.';
+        setMessage(errorMsg);
+        toast.error('Verification failed', errorMsg);
         return;
       }
-      setMessage(`Company marked ${status}.`);
+      const successMsg = `Company marked ${status}.`;
+      setMessage(successMsg);
+      toast.success(status === 'approved' ? 'Company approved!' : `Company ${status}`, successMsg);
       if (submissionId) {
         setNotesBySubmission((prev) => ({ ...prev, [submissionId]: '' }));
       }
       await load();
     } catch {
-      setMessage('The review request could not be completed. Please retry.');
+      const failMsg = 'The review request could not be completed. Please retry.';
+      setMessage(failMsg);
+      toast.error('Action failed', failMsg);
     } finally {
       setActingId('');
     }
@@ -103,7 +112,12 @@ export default function AdminCompaniesPage() {
   };
 
   const deletePermit = async (verificationId: string) => {
-    if (!window.confirm('Delete this business permit submission and its uploaded file?')) return;
+    const ok = await confirmDialog('Permanently delete this business permit submission and its uploaded file?', {
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      type: 'error',
+    });
+    if (!ok) return;
 
     setActingId(verificationId);
     setMessage('');
@@ -116,15 +130,19 @@ export default function AdminCompaniesPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not delete business permit.');
       setMessage('Business permit deleted.');
+      toast.success('Permit deleted', 'The business permit submission was removed.');
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not delete business permit.');
+      const msg = error instanceof Error ? error.message : 'Could not delete business permit.';
+      setMessage(msg);
+      toast.error('Delete failed', msg);
     } finally {
       setActingId('');
     }
   };
 
   return (
+    <>
     <DashboardLayout
       portal="admin"
       title="Company Verification"
@@ -281,5 +299,7 @@ export default function AdminCompaniesPage() {
         )}
       </Modal>
     </DashboardLayout>
+    {ConfirmDialog}
+    </>
   );
 }
