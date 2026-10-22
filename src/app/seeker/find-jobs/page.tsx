@@ -10,6 +10,7 @@ import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { JobCard } from '@/components/jobs/JobCard';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
+import { MatchBreakdownPopover } from '@/components/jobs/MatchBreakdownPopover';
 import { supabase } from '@/lib/supabase/client';
 import { fetchJobApplicantCounts } from '@/lib/services/jobTrackingService';
 import { fetchBackendJobMatches } from '@/lib/services/jobMatchService';
@@ -377,6 +378,7 @@ function FindJobsContent() {
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                               {matchScore}% Match
+                              {job.match && <MatchBreakdownPopover match={job.match} />}
                             </span>
                           )}
                           <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/80">
@@ -387,7 +389,7 @@ function FindJobsContent() {
                         {/* Job Details Meta (Salary, Employment, Posted Time) */}
                         <div className="space-y-1.5 text-xs text-slate-600">
                           <p className="font-semibold text-slate-700">
-                            $ {formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency || 'PHP')}
+                            {formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency || 'PHP')}
                           </p>
                           <p className="flex items-center gap-1.5 text-slate-500">
                             <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />

@@ -1,13 +1,11 @@
 /**
- * Documented WorkMatch compatibility weights.
- * Gemini may map related skill names; these weights always compute the score.
+ * WorkMatch compatibility weights — 4-factor model.
+ * Required Skills + Experience + Education + Location = 100%
  */
 export const MATCH_WEIGHTS = {
-  requiredSkills: 0.35,
-  preferredSkills: 0.10,
-  experience: 0.20,
-  education: 0.15,
-  certifications: 0.10,
+  requiredSkills: 0.45,
+  experience: 0.25,
+  education: 0.20,
   location: 0.10,
 } as const;
 

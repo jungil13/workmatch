@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ApplyModal } from '@/components/applications/ApplyModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { ApplicantStalkerModal } from '@/components/jobs/ApplicantStalkerModal';
+import { MatchBreakdownPopover } from '@/components/jobs/MatchBreakdownPopover';
 import {
   trackJobInteraction,
   fetchJobEngagementStats,
@@ -306,7 +307,10 @@ export function JobCard({
             </div>
             <div className="space-y-1 col-span-2 sm:col-span-1">
               <div className="flex justify-between text-[11px] font-bold">
-                <span className="text-slate-600">Overall Match</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  Overall Match
+                  <MatchBreakdownPopover match={job.match} />
+                </span>
                 <span className="text-emerald-700 font-black">
                   {Math.round(job.match.overallScore ?? 0)}%
                 </span>

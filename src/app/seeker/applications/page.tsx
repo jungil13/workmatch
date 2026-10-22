@@ -148,7 +148,7 @@ export default function SeekerApplicationsPage() {
                         </p>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1">
                           <span className="flex items-center gap-1 font-semibold text-slate-700">
-                            ₱ {formatSalaryRange(app.job?.salary_min, app.job?.salary_max, app.job?.salary_currency)}
+                            {formatSalaryRange(app.job?.salary_min, app.job?.salary_max, app.job?.salary_currency)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3 text-slate-400" />

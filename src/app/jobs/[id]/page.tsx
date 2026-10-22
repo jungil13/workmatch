@@ -31,6 +31,8 @@ import {
 import { fetchJobApplicantCounts, trackJobInteraction } from '@/lib/services/jobTrackingService';
 import { fetchBackendJobMatches } from '@/lib/services/jobMatchService';
 import { VerifiedCompanyBadge } from '@/components/ui/VerifiedCompanyBadge';
+import { MatchBreakdownPopover } from '@/components/jobs/MatchBreakdownPopover';
+import { MatchResult } from '@/types/matching';
 import { Modal } from '@/components/ui/Modal';
 import { CompanyPublicLinks } from '@/components/company/CompanyPublicLinks';
 import {
@@ -63,6 +65,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const [applicantsCount, setApplicantsCount] = useState<number | null>(null);
   const [companyDetailsOpen, setCompanyDetailsOpen] = useState(false);
   const [matchScore, setMatchScore] = useState<number | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [matchMode, setMatchMode] = useState<'gemini-assisted' | 'exact' | null>(null);
   const [matchState, setMatchState] = useState<'signed-out' | 'profile-needed' | 'loading' | 'ready' | 'unavailable'>('signed-out');
 
@@ -172,6 +175,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
               const match = matches[resolvedParams.id];
               const score = match?.overallScore;
               if (typeof score === 'number') {
+                setMatchResult(match);
                 setMatchScore(score);
                 setMatchMode(match.skillMatchMode || 'exact');
                 setMatchState('ready');
@@ -328,7 +332,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   };
 
   const formatSalaryDisplay = (min?: number, max?: number, currency: string = 'PHP') => {
-    const symbol = currency === 'USD' ? '$' : '₱';
+    const symbol = '₱';
     if (!min && !max) return `${symbol}60k - ${symbol}90k`;
     const formatK = (val: number) => {
       if (val >= 1000) return `${Math.round(val / 1000)}k`;
@@ -485,8 +489,11 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
               {/* Match Score Indicator (Right side of header) */}
               <div className="text-left sm:text-right shrink-0 sm:pl-4 self-start">
                 {matchState === 'ready' && matchScore !== null ? (
-                  <div className="text-2xl sm:text-3xl font-black text-[#00b074] leading-none">
-                    {matchScore}%
+                  <div className="flex items-center gap-1.5 justify-start sm:justify-end">
+                    <span className="text-2xl sm:text-3xl font-black text-[#00b074] leading-none">
+                      {matchScore}%
+                    </span>
+                    {matchResult && <MatchBreakdownPopover match={matchResult} />}
                   </div>
                 ) : (
                   <div className="text-xs font-semibold text-slate-500">
@@ -517,6 +524,57 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                   `We are looking for a ${job.title} to build scalable and high-performance web applications. You will work closely with designers, backend developers, and stakeholders to deliver great user experiences.`}
               </p>
             </div>
+
+            {/* Required Skills Section */}
+            {job.required_skills && job.required_skills.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#00b074]" /> Required Skills
+                  </h2>
+                  <span className="text-xs text-slate-400 font-medium">
+                    {job.required_skills.length} listed
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {job.required_skills.map((item: any, idx: number) => {
+                    const sName = item.name || item.skill?.name || 'Skill';
+                    const sCategory = item.category || item.skill?.category;
+                    const minProf = item.minimum_proficiency;
+                    const isMatched = matchResult?.matchedSkillNames?.some(
+                      (m) => m.toLowerCase() === sName.toLowerCase()
+                    );
+                    return (
+                      <span
+                        key={item.id || idx}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                          isMatched
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-slate-50 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {isMatched ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                        )}
+                        <span>{sName}</span>
+                        {minProf && (
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            (Lvl {minProf}/5)
+                          </span>
+                        )}
+                        {sCategory && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-500 font-normal">
+                            {sCategory}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Responsibilities */}
             <div className="space-y-3">
@@ -553,10 +611,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
               {/* Salary Range */}
               <div className="space-y-0.5 pb-2">
                 <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
-                  $ Salary Range
+                  Salary Range
                 </span>
                 <p className="text-xl font-black text-slate-900 tracking-tight">
-                  {formatSalaryDisplay(job.salary_min, job.salary_max, job.salary_currency || 'USD')}
+                  {formatSalaryDisplay(job.salary_min, job.salary_max, job.salary_currency || 'PHP')}
                 </p>
                 <p className="text-xs text-slate-400 font-normal">
                   Expected salary per year

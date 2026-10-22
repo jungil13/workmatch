@@ -26,9 +26,6 @@ export function hashMatchInputs(job: Job, candidate: CandidateEvaluationData) {
   const eduKey = (candidate.educations || [])
     .map((e: any) => [e.degree || '', e.field_of_study || '', Boolean(e.verified)])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-  const certKey = (candidate.certifications || [])
-    .map((c: any) => [c.name || '', Boolean(c.verified)])
-    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   const experienceKey = (candidate.workExperiences || [])
     .map((e: any) => [e.start_date || '', e.end_date || '', Boolean(e.is_current)])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -43,17 +40,16 @@ export function hashMatchInputs(job: Job, candidate: CandidateEvaluationData) {
     ])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return {
-    profileHash: `v2:${JSON.stringify({
+    profileHash: `v3:${JSON.stringify({
       yearsExperience: profile.years_experience || 0,
       city: profile.city || '',
       latitude: profile.latitude ?? null,
       longitude: profile.longitude ?? null,
       skills: skillKey,
       educations: eduKey,
-      certifications: certKey,
       workExperiences: experienceKey,
     })}`,
-    jobHash: `v2:${JSON.stringify({
+    jobHash: `v3:${JSON.stringify({
       id: job.id,
       title: job.title,
       experienceLevel: job.experience_level,
@@ -69,9 +65,8 @@ export function hashMatchInputs(job: Job, candidate: CandidateEvaluationData) {
 }
 
 /**
- * Deterministic compatibility score.
+ * 4-factor compatibility score: Required Skills, Experience, Education, Location.
  * relatedSkillMap: jobSkillName -> candidate skill names Gemini judged as related.
- * Gemini never adds skills the candidate did not provide.
  */
 export function calculateJobMatch(
   job: Job,
@@ -86,12 +81,10 @@ export function calculateJobMatch(
   const profile = candidate?.profile || ({} as any);
   const candidateSkills = candidate?.skills || [];
   const candidateEducations = candidate?.educations || [];
-  const candidateCerts = candidate?.certifications || [];
   const candidateExp = candidate?.workExperiences || [];
 
+  // All job skills are treated as required (preferred concept removed)
   const jobSkills = (job.required_skills || (job as any).job_skills || []) as any[];
-  const requiredSkills = jobSkills.filter((s) => s.is_required !== false);
-  const preferredSkills = jobSkills.filter((s) => s.is_required === false);
 
   const findCandidateSkill = (reqSkill: any) => {
     const reqName = skillName(reqSkill);
@@ -109,52 +102,43 @@ export function calculateJobMatch(
     });
   };
 
-  const scoreSkillGroup = (skills: any[], required: boolean) => {
-    if (!skills.length) return { score: 0, matched: 0, total: 0, used: false };
+  // ── REQUIRED SKILLS ─────────────────────────────────────────────────
+  let requiredSkillsScore: number;
+  let skillsMatched = 0;
+  let skillsTotal = 0;
+
+  if (!jobSkills.length) {
+    requiredSkillsScore = 50;
+    growthAreas.push('This job has no structured skill requirements listed.');
+  } else {
     let weighted = 0;
-    let matched = 0;
-    skills.forEach((reqSkill) => {
+    jobSkills.forEach((reqSkill) => {
+      skillsTotal += 1;
       const found = findCandidateSkill(reqSkill);
       const displayName = reqSkill?.name || reqSkill?.skill?.name || 'Skill';
       if (found) {
-        matched += 1;
+        skillsMatched += 1;
         const minProf = reqSkill?.minimum_proficiency || 3;
         const profRatio = Math.min(1, (found.proficiency || 3) / minProf);
         const verifiedBonus = found.verified ? 0.08 : 0;
         weighted += Math.min(1, profRatio * 0.92 + verifiedBonus);
         matchedSkillNames.push(displayName);
-      } else if (required) {
+      } else {
         missingRequired.push(displayName);
       }
     });
-    return {
-      score: Math.round((weighted / skills.length) * 100),
-      matched,
-      total: skills.length,
-      used: true,
-    };
-  };
+    requiredSkillsScore = Math.round((weighted / jobSkills.length) * 100);
 
-  const requiredResult = scoreSkillGroup(requiredSkills.length ? requiredSkills : jobSkills.filter((s) => s.is_required !== false), true);
-  const preferredResult = scoreSkillGroup(preferredSkills, false);
-
-  let requiredSkillsScore = requiredResult.used ? requiredResult.score : 40;
-  if (!jobSkills.length) {
-    requiredSkillsScore = 40;
-    growthAreas.push('This job has no structured skill requirements, so the skill score is limited.');
-  } else if (requiredResult.matched === requiredResult.total && requiredResult.total > 0) {
-    whyYouMatch.push(`Matches ${requiredResult.matched} of ${requiredResult.total} required skills`);
-  } else if (requiredResult.matched > 0) {
-    whyYouMatch.push(`Matches ${requiredResult.matched} of ${requiredResult.total} required skills`);
-  } else if (requiredResult.total > 0) {
-    growthAreas.push(`Missing required skills: ${missingRequired.slice(0, 4).join(', ')}`);
+    if (skillsMatched === skillsTotal && skillsTotal > 0) {
+      whyYouMatch.push(`Matches all ${skillsTotal} required skills`);
+    } else if (skillsMatched > 0) {
+      whyYouMatch.push(`Matches ${skillsMatched} of ${skillsTotal} required skills`);
+    } else {
+      growthAreas.push(`Missing required skills: ${missingRequired.slice(0, 4).join(', ')}`);
+    }
   }
 
-  let preferredSkillsScore = preferredResult.used ? preferredResult.score : 50;
-  if (preferredResult.matched > 0) {
-    whyYouMatch.push(`Also matches ${preferredResult.matched} preferred skill${preferredResult.matched === 1 ? '' : 's'}`);
-  }
-
+  // ── EXPERIENCE ──────────────────────────────────────────────────────
   const seekerExpYears =
     Number(profile?.years_experience) ||
     candidateExp.reduce((sum: number, exp: any) => {
@@ -166,49 +150,53 @@ export function calculateJobMatch(
 
   const expLevel = job.experience_level || 'Mid Level';
   const expectedYears = EXPERIENCE_YEARS_BY_LEVEL[expLevel] ?? 3;
-  let expScore = 40;
+  let expScore: number;
+
   if (seekerExpYears >= expectedYears) {
     expScore = 95;
     whyYouMatch.push(`${Math.round(seekerExpYears)} years of experience meets ${expLevel} expectations`);
   } else if (expectedYears === 0) {
-    expScore = 80;
+    expScore = 80; // Entry-level — no experience required
+  } else if (seekerExpYears > 0) {
+    expScore = Math.max(10, Math.round((seekerExpYears / Math.max(expectedYears, 1)) * 85));
+    growthAreas.push(`Role expects ~${expectedYears}+ years (${Math.round(seekerExpYears)} on your profile)`);
   } else {
-    expScore = Math.max(20, Math.round((seekerExpYears / Math.max(expectedYears, 1)) * 85));
-    growthAreas.push(`Role typically expects about ${expectedYears}+ years (${Math.round(seekerExpYears)} on your profile)`);
+    expScore = 15;
+    growthAreas.push(`No experience recorded; role expects about ${expectedYears}+ years`);
   }
 
-  const qualifications = `${job.qualifications || ''} ${job.description || ''}`.toLowerCase();
-  const wantsDegree = /bachelor|degree|college|graduate|diploma/.test(qualifications);
+  // ── EDUCATION ───────────────────────────────────────────────────────
+  const qualText = `${job.qualifications || ''} ${job.description || ''}`.toLowerCase();
+  const wantsDegree = /bachelor|degree|college|graduate|diploma/.test(qualText);
   const verifiedEdu = candidateEducations.some((e: any) => e.verified);
   const hasDegree = candidateEducations.length > 0;
-  let eduScore = 35;
+  let eduScore: number;
+
   if (verifiedEdu) {
     eduScore = 92;
-    whyYouMatch.push('Has education records marked verified by WorkMatch admin review');
+    whyYouMatch.push('Education records verified by WorkMatch admin');
   } else if (hasDegree) {
     eduScore = wantsDegree ? 78 : 70;
     whyYouMatch.push(`Education on file: ${candidateEducations[0].degree || 'credential'} in ${candidateEducations[0].field_of_study || 'a related field'}`);
     growthAreas.push('Education is listed but not admin-verified yet.');
   } else if (wantsDegree) {
     eduScore = 25;
-    growthAreas.push('Job qualifications mention a degree or diploma that is not on your profile.');
-  }
-
-  const verifiedCerts = candidateCerts.filter((c: any) => c.verified).length;
-  let certScore = 40;
-  if (candidateCerts.length === 0) {
-    certScore = 40;
+    growthAreas.push('Job qualifications mention a degree or diploma not on your profile.');
   } else {
-    certScore = Math.min(90, 55 + candidateCerts.length * 8 + verifiedCerts * 6);
-    whyYouMatch.push(`${candidateCerts.length} certification${candidateCerts.length === 1 ? '' : 's'} on file${verifiedCerts ? ` (${verifiedCerts} verified)` : ''}`);
+    eduScore = 35;
   }
 
-  let locScore = 50;
+  // ── LOCATION ────────────────────────────────────────────────────────
+  let locScore = 30;
   let distanceKm: number | undefined;
+
   if (job.work_arrangement === 'Remote') {
     locScore = 90;
     whyYouMatch.push('Remote role — location is not a blocker');
-  } else if (profile.latitude != null && profile.longitude != null && job.latitude != null && job.longitude != null) {
+  } else if (
+    profile.latitude != null && profile.longitude != null &&
+    job.latitude != null && job.longitude != null
+  ) {
     distanceKm = calculateHaversineDistance(
       { latitude: profile.latitude, longitude: profile.longitude },
       { latitude: job.latitude, longitude: job.longitude }
@@ -225,17 +213,16 @@ export function calculateJobMatch(
     whyYouMatch.push(`Same city as the posting (${job.city})`);
   }
 
+  // ── OVERALL SCORE (4 factors, weights sum to 1.0) ───────────────────
   const overallScore = Math.min(
     MATCH_SCORE_CAP,
     Math.max(
       MATCH_SCORE_FLOOR,
       Math.round(
         requiredSkillsScore * MATCH_WEIGHTS.requiredSkills +
-          preferredSkillsScore * MATCH_WEIGHTS.preferredSkills +
-          expScore * MATCH_WEIGHTS.experience +
-          eduScore * MATCH_WEIGHTS.education +
-          certScore * MATCH_WEIGHTS.certifications +
-          locScore * MATCH_WEIGHTS.location
+        expScore * MATCH_WEIGHTS.experience +
+        eduScore * MATCH_WEIGHTS.education +
+        locScore * MATCH_WEIGHTS.location
       )
     )
   );
@@ -248,7 +235,7 @@ export function calculateJobMatch(
   else tier = 'Low';
 
   if (missingRequired.length) {
-    growthAreas.push(`Unverified or missing requirements: ${missingRequired.slice(0, 5).join(', ')}`);
+    growthAreas.push(`Missing requirements: ${missingRequired.slice(0, 5).join(', ')}`);
   }
 
   return {
@@ -257,31 +244,21 @@ export function calculateJobMatch(
     isEstimate: true,
     factors: {
       requiredSkills: {
-        name: 'Required skills',
+        name: 'Required Skills',
         weight: MATCH_WEIGHTS.requiredSkills,
         score: requiredSkillsScore,
         weightedScore: Math.round(requiredSkillsScore * MATCH_WEIGHTS.requiredSkills),
         explanation: jobSkills.length
-          ? `${requiredResult.matched} of ${requiredResult.total || jobSkills.length} required skills`
+          ? `${skillsMatched} of ${skillsTotal} required skills matched`
           : 'No structured required skills on this job',
         positive: requiredSkillsScore >= 70,
-      },
-      preferredSkills: {
-        name: 'Preferred skills',
-        weight: MATCH_WEIGHTS.preferredSkills,
-        score: preferredSkillsScore,
-        weightedScore: Math.round(preferredSkillsScore * MATCH_WEIGHTS.preferredSkills),
-        explanation: preferredResult.total
-          ? `${preferredResult.matched} of ${preferredResult.total} preferred skills`
-          : 'No preferred skills listed',
-        positive: preferredSkillsScore >= 60,
       },
       experience: {
         name: 'Experience',
         weight: MATCH_WEIGHTS.experience,
         score: expScore,
         weightedScore: Math.round(expScore * MATCH_WEIGHTS.experience),
-        explanation: `${Math.round(seekerExpYears)} years vs ${expLevel}`,
+        explanation: `${Math.round(seekerExpYears)} yrs on profile vs ${expLevel} (${expectedYears}+ yrs expected)`,
         positive: expScore >= 75,
       },
       education: {
@@ -294,14 +271,6 @@ export function calculateJobMatch(
           : 'No education records on profile',
         positive: eduScore >= 75,
       },
-      certifications: {
-        name: 'Certifications',
-        weight: MATCH_WEIGHTS.certifications,
-        score: certScore,
-        weightedScore: Math.round(certScore * MATCH_WEIGHTS.certifications),
-        explanation: candidateCerts.length ? `${candidateCerts.length} on file` : 'No certifications listed',
-        positive: certScore >= 70,
-      },
       location: {
         name: 'Location',
         weight: MATCH_WEIGHTS.location,
@@ -309,18 +278,20 @@ export function calculateJobMatch(
         weightedScore: Math.round(locScore * MATCH_WEIGHTS.location),
         explanation:
           job.work_arrangement === 'Remote'
-            ? 'Remote'
+            ? 'Remote — no location barrier'
             : distanceKm != null
               ? `${distanceKm.toFixed(1)} km from ${job.city || 'the job'}`
-              : job.city || 'Location not fully specified',
+              : job.city
+                ? `Job is in ${job.city}`
+                : 'Location not fully specified',
         positive: locScore >= 75,
       },
     },
-    whyYouMatch: whyYouMatch.length ? whyYouMatch : ['Limited overlap based on the current profile and job requirements.'],
+    whyYouMatch: whyYouMatch.length ? whyYouMatch : ['Limited overlap based on current profile and job requirements.'],
     growthAreas,
     distanceKm,
-    matchedSkillsCount: requiredResult.matched + preferredResult.matched,
-    totalRequiredSkillsCount: requiredResult.total || jobSkills.length,
+    matchedSkillsCount: skillsMatched,
+    totalRequiredSkillsCount: skillsTotal,
     matchedSkillNames: Array.from(new Set(matchedSkillNames)),
     missingRequiredSkillNames: missingRequired,
   };

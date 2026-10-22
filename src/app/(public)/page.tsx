@@ -189,18 +189,10 @@ export default function HomePage() {
               console.error('Could not load backend job matches for homepage:', error);
             }
           }
-          const applicantVisibleJobIds = dbJobs
-            .filter((job) =>
-              currentRole === 'admin' ||
-              (currentRole === 'employer' && employerCompanyId === job.company_id)
-            )
-            .map((job) => job.id);
-          if (applicantVisibleJobIds.length > 0) {
-            try {
-              applicantCounts = await fetchJobApplicantCounts(applicantVisibleJobIds);
-            } catch (error) {
-              console.error('Could not load employer job applicant counts:', error);
-            }
+          try {
+            applicantCounts = await fetchJobApplicantCounts(dbJobs.map((job) => job.id));
+          } catch (error) {
+            console.error('Could not load job applicant counts for homepage:', error);
           }
 
           const colors = ['bg-blue-600', 'bg-emerald-600', 'bg-orange-600', 'bg-purple-600', 'bg-rose-600', 'bg-indigo-600'];
@@ -236,13 +228,13 @@ export default function HomePage() {
               city: j.city || '',
               postedAgo: j.created_at ? `Posted ${formatRelativeTime(j.created_at)}` : 'Posted recently',
               skills: skillsList.slice(0, 4),
-              appliedCount: canViewApplicants ? applicantCounts[j.id] ?? null : null,
+              appliedCount: applicantCounts[j.id] ?? null,
               isUrgent: !!(j.is_urgent || comp.is_urgent),
               canViewApplicants,
               rawJob: {
                 ...j,
                 ...(backendMatches[j.id] ? { match: backendMatches[j.id] } : {}),
-                ...(canViewApplicants ? { applicant_count: applicantCounts[j.id] } : {}),
+                applicant_count: applicantCounts[j.id],
               },
             };
           });
@@ -691,23 +683,25 @@ export default function HomePage() {
 
                     {/* Card Footer: Overlapping Avatars + Apply Now Button */}
                     <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                      {job.canViewApplicants && (
-                        <div
-                          className="flex items-center justify-between gap-2 -mx-1 px-1 py-1 rounded-xl transition-all cursor-pointer hover:bg-emerald-50/60 group/stalker"
-                          onClick={() => setSelectedJobForStalker(job.rawJob || job)}
-                          title="View applicants for this job"
-                        >
-                          <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                            <Users className="w-3 h-3 text-emerald-700" />
-                            {job.appliedCount === null
-                              ? 'Applicant count unavailable'
-                              : `${job.appliedCount} ${job.appliedCount === 1 ? 'applicant' : 'applicants'}`}
-                          </span>
+                      <div
+                        className={`flex items-center justify-between gap-2 -mx-1 px-1 py-1 rounded-xl transition-all ${
+                          job.canViewApplicants ? 'cursor-pointer hover:bg-emerald-50/60 group/stalker' : ''
+                        }`}
+                        onClick={job.canViewApplicants ? () => setSelectedJobForStalker(job.rawJob || job) : undefined}
+                        title={job.canViewApplicants ? 'View applicants for this job' : undefined}
+                      >
+                        <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Users className="w-3 h-3 text-emerald-700" />
+                          {job.appliedCount === null
+                            ? 'Applicant count unavailable'
+                            : `${job.appliedCount} ${job.appliedCount === 1 ? 'applicant' : 'applicants'}`}
+                        </span>
+                        {job.canViewApplicants && (
                           <span className="text-[11px] font-bold text-emerald-700 group-hover/stalker:underline flex items-center gap-1 shrink-0">
                             <Users className="w-3 h-3" /> See Applicants
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
                       {/* Apply Now Pill Button */}
                       <Link

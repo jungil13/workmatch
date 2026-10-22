@@ -15,10 +15,8 @@ export interface MatchResult {
   isEstimate: boolean;
   factors: {
     requiredSkills: MatchFactorBreakdown;
-    preferredSkills: MatchFactorBreakdown;
     experience: MatchFactorBreakdown;
     education: MatchFactorBreakdown;
-    certifications: MatchFactorBreakdown;
     location: MatchFactorBreakdown;
   };
   whyYouMatch: string[];
