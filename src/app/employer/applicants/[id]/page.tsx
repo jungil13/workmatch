@@ -265,7 +265,8 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
   ];
   const hiredElsewhere =
     seekerProfile?.employment_status === 'hired' && seekerProfile?.hired_application_id !== application.id;
-  const statusLocked = application.status === 'hired' || hiredElsewhere;
+  const isRejected = application.status === 'rejected';
+  const statusLocked = application.status === 'hired' || hiredElsewhere || isRejected;
 
   return (
     <DashboardLayout
@@ -353,10 +354,6 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  ['Experience', `${seekerProfile?.years_experience ?? 0} years`],
-                  ['Availability', seekerProfile?.availability || 'Not specified'],
-                  ['Preferred job type', seekerProfile?.preferred_job_type || 'Not specified'],
-                  ['Work arrangement', seekerProfile?.preferred_work_arrangement || 'Not specified'],
                   [
                     'Expected monthly salary',
                     seekerProfile?.preferred_salary_min || seekerProfile?.preferred_salary_max
@@ -625,6 +622,8 @@ export default function EmployerApplicantDetailPage({ params }: { params: Promis
               <p className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">
                 {hiredElsewhere
                   ? 'This candidate has already accepted an offer elsewhere. Their application status is locked.'
+                  : isRejected
+                  ? 'This application has been rejected. The status cannot be changed.'
                   : 'This hire is confirmed. The application status is locked.'}
               </p>
             ) : (

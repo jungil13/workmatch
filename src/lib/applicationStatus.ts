@@ -39,9 +39,7 @@ export const APPLICATION_STATUS_COLORS: Record<string, string> = {
 export const EMPLOYER_STATUS_OPTIONS = [
   { value: 'applied', label: APPLICATION_STATUS_LABELS.applied },
   { value: 'screening', label: APPLICATION_STATUS_LABELS.screening },
-  { value: 'shortlisted', label: APPLICATION_STATUS_LABELS.shortlisted },
   { value: 'interview', label: APPLICATION_STATUS_LABELS.interview },
-  { value: 'offer', label: APPLICATION_STATUS_LABELS.offer },
   { value: 'rejected', label: APPLICATION_STATUS_LABELS.rejected },
   { value: 'closed', label: APPLICATION_STATUS_LABELS.closed },
 ];

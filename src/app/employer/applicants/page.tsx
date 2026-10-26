@@ -31,9 +31,7 @@ import {
 const STATUS_OPTIONS = [
   { value: 'applied', label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
   { value: 'screening', label: 'Under Review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-  { value: 'shortlisted', label: 'Shortlisted', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
   { value: 'interview', label: 'Interview', color: 'text-violet-700 bg-violet-50 border-violet-200' },
-  { value: 'offer', label: 'Offer', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
   { value: 'hired', label: 'Hired', color: 'text-emerald-800 bg-emerald-100 border-emerald-300' },
   { value: 'rejected', label: 'Rejected', color: 'text-rose-700 bg-rose-50 border-rose-200' },
   { value: 'closed', label: 'Closed', color: 'text-slate-700 bg-slate-100 border-slate-300' },
@@ -169,7 +167,7 @@ export default function EmployerApplicantsPage() {
 
   const handleQuickStatusChange = async (appId: string, newStatus: string) => {
     const targetApp = applications.find((application) => application.id === appId);
-    if (!targetApp || isCandidateHiredElsewhere(targetApp)) return;
+    if (!targetApp || isCandidateHiredElsewhere(targetApp) || targetApp.status === 'rejected') return;
 
     const response = await fetch('/api/applications/update-status', {
       method: 'POST',
@@ -293,6 +291,9 @@ export default function EmployerApplicantsPage() {
     application.status === 'hired' ||
     (application.applicant?.job_seeker_profile?.employment_status === 'hired' &&
       application.applicant?.job_seeker_profile?.hired_application_id !== application.id);
+
+  const isStatusLocked = (app: any) =>
+    isCandidateHiredElsewhere(app) || app.status === 'rejected';
 
   const filteredApps = applications.filter((app) => {
     if (statusFilter === 'all') return true;
@@ -577,8 +578,10 @@ export default function EmployerApplicantsPage() {
 
                   {/* Quick Status Bar & Details Link */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    {hiredElsewhere ? (
-                      <span className="text-[11px] font-semibold text-slate-500">Status locked</span>
+                    {isStatusLocked(app) ? (
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        {app.status === 'rejected' ? 'Status locked — Rejected' : 'Status locked'}
+                      </span>
                     ) : (
                       <button
                         type="button"

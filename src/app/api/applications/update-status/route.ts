@@ -72,14 +72,17 @@ export async function POST(request: NextRequest) {
     }
 
     const hireConfirmedOnApplication = application.status === 'hired';
+    const rejectedApplication = application.status === 'rejected';
     const hiredElsewhere =
       (seeker?.employment_status === 'hired' && seeker.hired_application_id !== applicationId) ||
       Boolean(otherHire);
-    if (hireConfirmedOnApplication || hiredElsewhere) {
+    if (hireConfirmedOnApplication || hiredElsewhere || rejectedApplication) {
       return NextResponse.json(
         {
           error: hireConfirmedOnApplication
             ? 'This hire is already confirmed. The application status is locked.'
+            : rejectedApplication
+            ? 'This application has been rejected. The status cannot be changed.'
             : 'This candidate has already accepted an offer elsewhere. Their application status is locked.',
         },
         { status: 409 }
