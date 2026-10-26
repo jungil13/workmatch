@@ -14,6 +14,10 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
+  Video,
+  Building2,
+  Calendar,
+  Link2,
 } from 'lucide-react';
 import { formatSalaryRange } from '@/lib/utils';
 import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS } from '@/lib/applicationStatus';
@@ -32,6 +36,7 @@ const STAGES = Object.keys(APPLICATION_STATUS_LABELS).map((key) => ({
 
 export default function SeekerApplicationsPage() {
   const [applications, setApplications] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -47,8 +52,30 @@ export default function SeekerApplicationsPage() {
         `)
         .eq('applicant_id', user.id)
         .order('applied_at', { ascending: false })
-        .then(({ data }) => {
-          setApplications(data ?? []);
+        .then(async ({ data }) => {
+          const apps = data ?? [];
+          setApplications(apps);
+
+          // Fetch interviews for all interview-status applications
+          const interviewAppIds = apps
+            .filter((a: any) => a.status === 'interview')
+            .map((a: any) => a.id);
+
+          if (interviewAppIds.length > 0) {
+            const { data: ivData } = await supabase
+              .from('interviews')
+              .select('*')
+              .in('application_id', interviewAppIds)
+              .order('scheduled_at', { ascending: false });
+
+            // Map by application_id (take the latest)
+            const ivMap: Record<string, any> = {};
+            (ivData ?? []).forEach((iv: any) => {
+              if (!ivMap[iv.application_id]) ivMap[iv.application_id] = iv;
+            });
+            setInterviews(ivMap);
+          }
+
           setLoading(false);
         });
     });
@@ -128,6 +155,7 @@ export default function SeekerApplicationsPage() {
                 label: app.status || 'Pending',
                 color: 'bg-slate-100 text-slate-700',
               };
+              const interview = interviews[app.id];
 
               return (
                 <div
@@ -171,6 +199,79 @@ export default function SeekerApplicationsPage() {
                       </Link>
                     </div>
                   </div>
+
+                  {/* Interview Details Banner */}
+                  {app.status === 'interview' && interview && (
+                    <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-violet-100 border border-violet-200 flex items-center justify-center">
+                          {interview.interview_type === 'onsite'
+                            ? <Building2 className="w-3.5 h-3.5 text-violet-600" />
+                            : <Video className="w-3.5 h-3.5 text-violet-600" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-violet-900">
+                            🎉 Interview Scheduled!
+                          </p>
+                          <p className="text-[10px] text-violet-600 font-semibold">
+                            {interview.interview_type === 'onsite' ? 'On-site / In-person Interview' : 'Online / Virtual Interview'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border border-violet-100">
+                          <Calendar className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                          <div>
+                            <p className="text-[10px] text-violet-500 font-semibold uppercase">Date & Time</p>
+                            <p className="text-xs font-bold text-violet-900">
+                              {new Date(interview.scheduled_at).toLocaleString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {interview.interview_type === 'online' && interview.meeting_url && (
+                          <a
+                            href={interview.meeting_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border border-violet-100 hover:border-violet-300 transition-colors group"
+                          >
+                            <Link2 className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-violet-500 font-semibold uppercase">Meeting Link</p>
+                              <p className="text-xs font-bold text-violet-700 truncate group-hover:underline">
+                                {interview.meeting_url}
+                              </p>
+                            </div>
+                          </a>
+                        )}
+
+                        {interview.interview_type === 'onsite' && interview.location && (
+                          <div className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border border-violet-100">
+                            <MapPin className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                            <div>
+                              <p className="text-[10px] text-violet-500 font-semibold uppercase">Location</p>
+                              <p className="text-xs font-bold text-violet-900">{interview.location}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {interview.notes && (
+                        <div className="text-[11px] text-violet-700 bg-white/60 rounded-xl px-3 py-2 border border-violet-100">
+                          <span className="font-bold">Note:</span> {interview.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Attached Resume */}
                   {app.resume && (
